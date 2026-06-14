@@ -1,0 +1,91 @@
+## Build outputs
+bin/
+obj/
+out/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+*.rsuser
+*.vsp
+*.vspx
+*.sap
+
+## Rider
+.idea/
+*.sln.iml
+
+## Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+## Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage*/
+/coverage/
+
+## Entity Framework
+*.mdf
+*.ldf
+*.ndf
+Migrations/Development/
+
+## Logs
+logs/
+*.log
+*.log.*
+
+## Runtime / temp
+*.tmp
+*.temp
+[Tt]emp/
+[Ll]og/
+
+## Publish output
+publish/
+PublishProfiles/
+
+## Docker
+docker-compose.override.yml
+
+## Secrets and environment
+*.pfx
+*.p12
+*.cer
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+secrets.json
+**/*secrets*.json
+
+## OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Static analysis / tools
+.sonarqube/
+.scannerwork/
+BenchmarkDotNet.Artifacts/

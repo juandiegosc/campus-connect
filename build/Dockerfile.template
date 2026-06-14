@@ -1,0 +1,25 @@
+# Plantilla de Dockerfile multi-stage para los servicios .NET.
+# Copiar a src/Services/<Servicio>/<Servicio>.API/Dockerfile y reemplazar las variables.
+# El contexto de build es la raiz del repo (ver docker-compose.yml), por eso las
+# rutas COPY parten de src/ y BuildingBlocks se incluye como project reference.
+
+# ---- build ----
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+# Copiar csproj primero para aprovechar la cache de restore.
+# Ajustar <Servicio> al nombre real (Academic, Payments, etc.).
+COPY src/BuildingBlocks/ src/BuildingBlocks/
+COPY src/Services/<Servicio>/ src/Services/<Servicio>/
+
+RUN dotnet restore "src/Services/<Servicio>/<Servicio>.API/<Servicio>.API.csproj"
+RUN dotnet publish "src/Services/<Servicio>/<Servicio>.API/<Servicio>.API.csproj" \
+    -c Release -o /app/publish --no-restore
+
+# ---- runtime ----
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+WORKDIR /app
+EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "<Servicio>.API.dll"]

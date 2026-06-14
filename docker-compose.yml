@@ -1,0 +1,315 @@
+name: campusconnect360
+
+# Esqueleto de infraestructura y servicios de CampusConnect 360.
+# Topologia: una instancia Postgres por microservicio + RabbitMQ + Gateway.
+# La infraestructura (rabbitmq y los postgres) arranca de inmediato.
+# Los servicios .NET cobran vida cuando exista su Dockerfile (ver carpeta src/Services).
+
+x-postgres-healthcheck: &pg-health
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Mensajeria
+  # ---------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: cc-rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Panel de administracion
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - campusnet
+
+  # ---------------------------------------------------------------------------
+  # Bases de datos: una por microservicio
+  # ---------------------------------------------------------------------------
+  identity-db:
+    image: postgres:16
+    container_name: cc-identity-db
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: ${DB_USER:-campus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus}
+    ports:
+      - "5433:5432"
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-campus} -d identity_db"]
+      <<: *pg-health
+    networks:
+      - campusnet
+
+  academic-db:
+    image: postgres:16
+    container_name: cc-academic-db
+    environment:
+      POSTGRES_DB: academic_db
+      POSTGRES_USER: ${DB_USER:-campus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus}
+    ports:
+      - "5434:5432"
+    volumes:
+      - academic-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-campus} -d academic_db"]
+      <<: *pg-health
+    networks:
+      - campusnet
+
+  payments-db:
+    image: postgres:16
+    container_name: cc-payments-db
+    environment:
+      POSTGRES_DB: payments_db
+      POSTGRES_USER: ${DB_USER:-campus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus}
+    ports:
+      - "5435:5432"
+    volumes:
+      - payments-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-campus} -d payments_db"]
+      <<: *pg-health
+    networks:
+      - campusnet
+
+  attendance-db:
+    image: postgres:16
+    container_name: cc-attendance-db
+    environment:
+      POSTGRES_DB: attendance_db
+      POSTGRES_USER: ${DB_USER:-campus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus}
+    ports:
+      - "5436:5432"
+    volumes:
+      - attendance-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-campus} -d attendance_db"]
+      <<: *pg-health
+    networks:
+      - campusnet
+
+  notifications-db:
+    image: postgres:16
+    container_name: cc-notifications-db
+    environment:
+      POSTGRES_DB: notifications_db
+      POSTGRES_USER: ${DB_USER:-campus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus}
+    ports:
+      - "5437:5432"
+    volumes:
+      - notifications-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-campus} -d notifications_db"]
+      <<: *pg-health
+    networks:
+      - campusnet
+
+  analytics-db:
+    image: postgres:16
+    container_name: cc-analytics-db
+    environment:
+      POSTGRES_DB: analytics_db
+      POSTGRES_USER: ${DB_USER:-campus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus}
+    ports:
+      - "5438:5432"
+    volumes:
+      - analytics-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-campus} -d analytics_db"]
+      <<: *pg-health
+    networks:
+      - campusnet
+
+  # ---------------------------------------------------------------------------
+  # Microservicios .NET
+  # Descomentar build cuando exista el Dockerfile de cada servicio.
+  # ---------------------------------------------------------------------------
+  identity-service:
+    build:
+      context: .
+      dockerfile: src/Services/Identity/Identity.API/Dockerfile
+    container_name: cc-identity-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=identity-db;Port=5432;Database=identity_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+  academic-service:
+    build:
+      context: .
+      dockerfile: src/Services/Academic/Academic.API/Dockerfile
+    container_name: cc-academic-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=academic-db;Port=5432;Database=academic_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: ${RABBITMQ_USER:-guest}
+      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      academic-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+  payments-service:
+    build:
+      context: .
+      dockerfile: src/Services/Payments/Payments.API/Dockerfile
+    container_name: cc-payments-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=payments-db;Port=5432;Database=payments_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: ${RABBITMQ_USER:-guest}
+      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      Services__Academic__BaseUrl: "http://academic-service:8080"
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      payments-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+  attendance-service:
+    build:
+      context: .
+      dockerfile: src/Services/Attendance/Attendance.API/Dockerfile
+    container_name: cc-attendance-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=attendance-db;Port=5432;Database=attendance_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: ${RABBITMQ_USER:-guest}
+      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      attendance-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+  notifications-service:
+    build:
+      context: .
+      dockerfile: src/Services/Notifications/Notifications.API/Dockerfile
+    container_name: cc-notifications-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=notifications-db;Port=5432;Database=notifications_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: ${RABBITMQ_USER:-guest}
+      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      notifications-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: src/Services/Analytics/Analytics.API/Dockerfile
+    container_name: cc-analytics-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=analytics-db;Port=5432;Database=analytics_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: ${RABBITMQ_USER:-guest}
+      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+  # ---------------------------------------------------------------------------
+  # API Gateway (Ocelot)
+  # ---------------------------------------------------------------------------
+  gateway:
+    build:
+      context: .
+      dockerfile: src/Gateway/CampusConnect.Gateway/Dockerfile
+    container_name: cc-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
+      Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+    depends_on:
+      - identity-service
+      - academic-service
+      - payments-service
+      - attendance-service
+      - notifications-service
+      - analytics-service
+    networks:
+      - campusnet
+    profiles: ["services"]
+
+networks:
+  campusnet:
+    driver: bridge
+
+volumes:
+  identity-data:
+  academic-data:
+  payments-data:
+  attendance-data:
+  notifications-data:
+  analytics-data:
