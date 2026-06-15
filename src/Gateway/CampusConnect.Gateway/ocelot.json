@@ -8,12 +8,26 @@
       "DownstreamHostAndPorts": [ { "Host": "identity-service", "Port": 8080 } ]
     },
     {
+      "UpstreamPathTemplate": "/api/academic/health",
+      "UpstreamHttpMethod": [ "GET" ],
+      "DownstreamPathTemplate": "/api/academic/health",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "academic-service", "Port": 8080 } ]
+    },
+    {
       "UpstreamPathTemplate": "/api/academic/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
       "DownstreamPathTemplate": "/api/academic/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [ { "Host": "academic-service", "Port": 8080 } ],
       "AuthenticationOptions": { "AuthenticationProviderKey": "Bearer", "AllowedScopes": [] }
+    },
+    {
+      "UpstreamPathTemplate": "/api/payments/health",
+      "UpstreamHttpMethod": [ "GET" ],
+      "DownstreamPathTemplate": "/api/payments/health",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "payments-service", "Port": 8080 } ]
     },
     {
       "UpstreamPathTemplate": "/api/payments/{everything}",
@@ -24,6 +38,13 @@
       "AuthenticationOptions": { "AuthenticationProviderKey": "Bearer", "AllowedScopes": [] }
     },
     {
+      "UpstreamPathTemplate": "/api/attendance/health",
+      "UpstreamHttpMethod": [ "GET" ],
+      "DownstreamPathTemplate": "/api/attendance/health",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "attendance-service", "Port": 8080 } ]
+    },
+    {
       "UpstreamPathTemplate": "/api/attendance/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
       "DownstreamPathTemplate": "/api/attendance/{everything}",
@@ -32,12 +53,26 @@
       "AuthenticationOptions": { "AuthenticationProviderKey": "Bearer", "AllowedScopes": [] }
     },
     {
+      "UpstreamPathTemplate": "/api/notifications/health",
+      "UpstreamHttpMethod": [ "GET" ],
+      "DownstreamPathTemplate": "/api/notifications/health",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "notifications-service", "Port": 8080 } ]
+    },
+    {
       "UpstreamPathTemplate": "/api/notifications/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
       "DownstreamPathTemplate": "/api/notifications/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [ { "Host": "notifications-service", "Port": 8080 } ],
       "AuthenticationOptions": { "AuthenticationProviderKey": "Bearer", "AllowedScopes": [] }
+    },
+    {
+      "UpstreamPathTemplate": "/api/analytics/health",
+      "UpstreamHttpMethod": [ "GET" ],
+      "DownstreamPathTemplate": "/api/analytics/health",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "analytics-service", "Port": 8080 } ]
     },
     {
       "UpstreamPathTemplate": "/api/analytics/{everything}",

@@ -3,7 +3,7 @@
 ## Fase completada
 
 **Cambio**: `backend-bootstrap` (Phase 1 del backend)
-**Estado**: PARCIAL — Fases 1–6 de 10 completadas en esta sesión.
+**Estado**: COMPLETO — Fases 1–10 de 10 completadas.
 **Fecha**: 2026-06-14
 **SDK activo**: .NET 10.0.101
 
@@ -27,7 +27,7 @@
 
 | Archivo | Descripción |
 |---|---|
-| `CampusConnect360.sln` | Solución con 4 proyectos kernel |
+| `CampusConnect360.sln` | Solución con 11 proyectos (4 kernel + Gateway + 6 stubs) |
 | `src/BuildingBlocks/BuildingBlocks.Contracts/BuildingBlocks.Contracts.csproj` | classlib net10.0, sin PackageReferences |
 | `src/BuildingBlocks/BuildingBlocks.Domain/BuildingBlocks.Domain.csproj` | classlib net10.0, sin PackageReferences |
 | `src/BuildingBlocks/BuildingBlocks.Application/BuildingBlocks.Application.csproj` | refs Domain + Contracts; MediatR, FluentValidation, Serilog |
@@ -89,6 +89,35 @@
 | `Time/IntegrationEventFactory.cs` | implementa IIntegrationEventFactory con TimeProvider |
 | `DependencyInjection.cs` | AddCampusConnectInfrastructure(IServiceCollection, IConfiguration) |
 
+### Fase 7 — Gateway (CampusConnect.Gateway)
+
+| Archivo | Descripción |
+|---|---|
+| `src/Gateway/CampusConnect.Gateway/CampusConnect.Gateway.csproj` | net10.0 WebApp; refs Ocelot, JwtBearer, Serilog |
+| `src/Gateway/CampusConnect.Gateway/Program.cs` | JWT Bearer con placeholder dev key; middleware /health antes de UseOcelot(); Serilog bootstrap |
+| `src/Gateway/CampusConnect.Gateway/appsettings.json` | Serilog MinimumLevel: Information |
+| `src/Gateway/CampusConnect.Gateway/ocelot.json` | Rutas: /health sin auth + /api/{slug}/health sin auth + /api/{slug}/{everything} con auth (académico y siguientes) |
+| `src/Gateway/CampusConnect.Gateway/Dockerfile` | Copia Directory.Packages.props + Directory.Build.props + src/Gateway; multi-stage sdk:10.0/aspnet:10.0 |
+
+### Fase 8 — 6 Service API Stubs
+
+| Servicio | Archivos creados |
+|---|---|
+| Identity | `src/Services/Identity/Identity.API/{Identity.API.csproj, Program.cs, appsettings.json, Dockerfile}` |
+| Academic | `src/Services/Academic/Academic.API/{Academic.API.csproj, Program.cs, appsettings.json, Dockerfile}` |
+| Payments | `src/Services/Payments/Payments.API/{Payments.API.csproj, Program.cs, appsettings.json, Dockerfile}` |
+| Attendance | `src/Services/Attendance/Attendance.API/{Attendance.API.csproj, Program.cs, appsettings.json, Dockerfile}` |
+| Notifications | `src/Services/Notifications/Notifications.API/{Notifications.API.csproj, Program.cs, appsettings.json, Dockerfile}` |
+| Analytics | `src/Services/Analytics/Analytics.API/{Analytics.API.csproj, Program.cs, appsettings.json, Dockerfile}` |
+
+Cada stub: `builder.Services.AddOpenApi()` + `app.MapOpenApi()` + `MapGet("/health", ...)` + `MapGet("/api/{slug}/health", ...)` (dual-health per ADR-013).
+
+### Archivos adicionales
+
+| Archivo | Descripción |
+|---|---|
+| `docker-compose.local.yml` | Override local: elimina host port bindings conflictivos de rabbitmq (5672/15672) e identity-db (5433) para entornos con otros proyectos activos |
+
 ---
 
 ## Decisiones tomadas (resumen de ADRs)
@@ -106,8 +135,8 @@
 | ADR-009 | Health checks: solo liveness en Phase 1 |
 | ADR-010 | Serilog 4.x con RenderedCompactJsonFormatter en Console |
 | ADR-011 | OpenAPI nativo (Microsoft.AspNetCore.OpenApi), sin Swashbuckle |
-| ADR-012 | Gateway JWT + ocelot.json (Phase 7 — pendiente) |
-| ADR-013 | Stubs con dual health /health + /api/{slug}/health (Phase 8 — pendiente) |
+| ADR-012 | Gateway JWT + ocelot.json; health via middleware antes de UseOcelot() |
+| ADR-013 | Stubs con dual health /health + /api/{slug}/health |
 | ADR-014 | Dockerfile.template actualizado a sdk:10.0 / aspnet:10.0 |
 | ADR-015 | TreatWarningsAsErrors=true solo en src/BuildingBlocks/; stubs con false |
 
@@ -124,36 +153,90 @@
 | MassTransit.RabbitMQ | 8.3.6 | |
 | MassTransit.EntityFrameworkCore | 8.3.6 | |
 | Microsoft.EntityFrameworkCore | 10.0.0 | |
+| Microsoft.AspNetCore.OpenApi | 10.0.0 | OpenAPI nativo, sin Swashbuckle |
+| Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.0 | |
 | Serilog | 4.2.0 | (transitive via Serilog.AspNetCore) |
 | Serilog.AspNetCore | 9.0.0 | |
 | Serilog.Formatting.Compact | 3.0.0 | |
-| Ocelot | 23.4.2 | PENDIENTE — no instalado aún (Phase 7) |
-| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.0 | PENDIENTE — no instalado aún (Phase 7/8) |
+| Ocelot | 23.4.2 | net10.0 via roll-forward desde net9.0; OK en runtime |
+| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.0 | |
 | .NET SDK activo | 10.0.101 | rollForward: latestFeature |
-
-### Gotcha detectado — IDE0005 con EnforceCodeStyleInBuild
-Para que `IDE0005` (unused usings) funcione como error en build, se requiere `GenerateDocumentationFile=true` en el `Directory.Build.props` de BuildingBlocks. Sin ello, MSBuild lanza un error `EnableGenerateDocumentationFile`. Añadido + `<NoWarn>CS1591</NoWarn>` para suprimir advertencias de XML doc faltante en miembros públicos.
-
-### Gotcha detectado — MediatR 12.x RequestHandlerDelegate
-En MediatR 12.x el delegado `RequestHandlerDelegate<TResponse>` es `Func<Task<TResponse>>` (sin `CancellationToken`). El código incorrecto `await next(cancellationToken)` falla con CS1593. La firma correcta es `await next()`.
-
-### Gotcha detectado — Microsoft.Extensions.Diagnostics.HealthChecks redundante
-Al usar `<FrameworkReference Include="Microsoft.AspNetCore.App" />`, el paquete `Microsoft.Extensions.Diagnostics.HealthChecks` ya está incluido en el framework. Añadirlo explícitamente genera `NU1510` (warning as error). Se eliminó del `<ItemGroup>` de PackageReferences.
 
 ---
 
-## Próxima fase
+## Gotchas y decisiones técnicas
 
-**Comando para retomar**:
+### Gotcha 1 — IDE0005 + EnforceCodeStyleInBuild
+Para que `IDE0005` (unused usings) funcione como error en build, se requiere `GenerateDocumentationFile=true` en el `Directory.Build.props` de BuildingBlocks. Sin ello, MSBuild lanza un error `EnableGenerateDocumentationFile`. Añadido + `<NoWarn>CS1591</NoWarn>` para suprimir advertencias de XML doc faltante en miembros públicos.
+
+### Gotcha 2 — MediatR 12.x RequestHandlerDelegate
+En MediatR 12.x el delegado `RequestHandlerDelegate<TResponse>` es `Func<Task<TResponse>>` (sin `CancellationToken`). El código incorrecto `await next(cancellationToken)` falla con CS1593. La firma correcta es `await next()`.
+
+### Gotcha 3 — Microsoft.Extensions.Diagnostics.HealthChecks redundante
+Al usar `<FrameworkReference Include="Microsoft.AspNetCore.App" />`, el paquete `Microsoft.Extensions.Diagnostics.HealthChecks` ya está incluido en el framework. Añadirlo explícitamente genera `NU1510` (warning as error). Se eliminó del `<ItemGroup>` de PackageReferences.
+
+### Gotcha 4 — NETSDK1022: Content items duplicados en Gateway
+`<Content Include="ocelot.json">` falla con NETSDK1022 porque el SDK de .NET ya incluye todos los archivos de Content por defecto. La solución es usar `<Content Update="ocelot.json">` para sobreescribir solo la propiedad `CopyToOutputDirectory`.
+
+### Gotcha 5 — Ocelot swallows all routes: UseOcelot() termina el pipeline
+`await app.UseOcelot()` llama `app.Run()` internamente. Cualquier `MapGet()` registrado ANTES queda inaccesible porque el routing de minimal API no se ejecuta. La solución es registrar el endpoint `/health` como middleware (`app.Use(async (ctx, next) => { ... })`) ANTES de `UseOcelot()`.
+
+### Gotcha 6 — SymmetricSecurityKey con clave vacía en dev
+`SymmetricSecurityKey` lanza `IDX10703` si la clave tiene 0 bytes. Cuando `JWT_SIGNING_KEY` no está configurado (dev bootstrap sin `.env`), se usa un placeholder de 32 bytes para que el Gateway arranque. En producción, `JWT_SIGNING_KEY` DEBE configurarse via env var o secrets manager.
+
+### Gotcha 7 — Directory.Packages.props ausente en Docker build
+El Dockerfile solo copiaba `src/Services/<Servicio>/` pero `Directory.Packages.props` vive en la raíz del repo. Sin ese archivo, `dotnet restore` falla con `NU1015: PackageReference items do not have a version specified`. Solución: añadir `COPY Directory.Packages.props .` y `COPY Directory.Build.props .` en todos los Dockerfiles antes del restore.
+
+### Gotcha 8 — Rutas /api/{slug}/health bloqueadas por AuthenticationOptions en ocelot.json
+Las rutas `/api/academic/{everything}`, `/api/payments/{everything}`, etc. tienen `AuthenticationOptions` que requieren un Bearer token. Esto bloqueaba los health probes sin token (401). Solución: añadir rutas específicas `/api/{slug}/health` SIN `AuthenticationOptions` ANTES de las rutas genéricas `/{everything}` en `ocelot.json`. Ocelot evalúa rutas en orden de aparición.
+
+### Gotcha 9 — Conflictos de puertos en entorno multi-proyecto
+El entorno del desarrollador tenía `wax-rabbitmq` ocupando 5672/15672 y `wax-postgres` ocupando 5433. Solución: `docker-compose.local.yml` que elimina los host port bindings conflictivos. Los contenedores siguen comunicándose correctamente via la red Docker interna `campusnet`.
+
+---
+
+## Verificación e2e completada: 2026-06-14
+
+### Resultado de curl probes
+
 ```
-/sdd-apply backend-bootstrap
+GET http://localhost:8080/health
+→ 200 {"status":"ok","service":"gateway"}
+
+GET http://localhost:8080/api/identity/health
+→ 200 {"status":"ok","service":"identity"}
+
+GET http://localhost:8080/api/academic/health
+→ 200 {"status":"ok","service":"academic"}
+
+GET http://localhost:8080/api/payments/health
+→ 200 {"status":"ok","service":"payments"}
+
+GET http://localhost:8080/api/attendance/health
+→ 200 {"status":"ok","service":"attendance"}
+
+GET http://localhost:8080/api/notifications/health
+→ 200 {"status":"ok","service":"notifications"}
+
+GET http://localhost:8080/api/analytics/health
+→ 200 {"status":"ok","service":"analytics"}
 ```
-Lee `sdd/backend-bootstrap/apply-progress` en engram para continuar exactamente donde quedó.
 
-**Fases pendientes**:
-- Fase 7: Gateway project (`CampusConnect.Gateway.csproj`, `Program.cs` con Ocelot + JWT, `appsettings.json`, `Dockerfile`)
-- Fase 8: 6 service API stubs con dual-health (`/health` + `/api/{slug}/health`), OpenAPI nativo, Dockerfiles
-- Fase 9: Verificación end-to-end via `docker compose --profile services up -d --build` + curl probes
-- Fase 10: Actualizar este `PROGRESS.md` + `CLAUDE.md` a estado FINAL, con versiones de Ocelot y Npgsql resueltas
+### Build verification final
+- `dotnet restore CampusConnect360.sln`: 0 errores
+- `dotnet build CampusConnect360.sln --no-incremental`: 0 errores, 0 warnings (11 proyectos: 4 kernel + Gateway + 6 stubs)
+- Todos los TreatWarningsAsErrors=true en src/BuildingBlocks/ pasaron sin warnings
+- 7 imágenes Docker construidas y corriendo exitosamente
 
-**Próximo cambio SDD** (después de backend-bootstrap): `identity-service` (Phase 2)
+---
+
+## Próximo cambio SDD
+
+**Cambio**: `identity-service` (Phase 2 del backend)
+
+Implementar el servicio de Identidad completo:
+- Domain: entidades User, Role, Permission
+- Application: comandos RegisterUser, LoginUser, etc.
+- Infrastructure: IdentityDbContext (Npgsql), repositorios
+- API: endpoints de autenticación con JWT
+- Tests de integración con Testcontainers.PostgreSql
