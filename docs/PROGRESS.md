@@ -504,3 +504,123 @@ POST ... [role: "Docente"] → 403
 ### Próximo cambio SDD
 
 `academic-service Phase 2` — PaymentConfirmedConsumer + StudentStatusUpdated publish + FinancialStatus.Overdue transition
+
+---
+
+## Fase 5 — academic-service Phase 2 (PaymentConfirmed Consumer + StudentStatusUpdated Publish)
+
+**Cambio**: `academic-service-phase2`
+**Estado**: COMPLETO — 28/28 tasks completadas
+**Fecha**: 2026-06-18
+**Tests**: 62/64 verdes (50 baseline + 14 nuevos) + 2 skips intencionales (ESC-60, ESC-63)
+**Verify**: passed-with-warnings — 0 CRITICAL, 2 WARNING, 2 SUGGESTION
+**ADRs**: ADR-039..043 finalizados
+
+### Alcance entregado
+
+**Academic.Application**:
+- `IStudentRepository.UpdateAsync` — nuevo port para persistir mutación de estado
+- `ConfirmPayment/ConfirmStudentPaymentCommand` (ICommand) — reacciona a PaymentConfirmed
+- `ConfirmPayment/ConfirmStudentPaymentCommandHandler` — carga Student, `ConfirmPayment()` idempotente (Pending/Overdue→Paid), publica `StudentStatusUpdated` ANTES de SaveChangesAsync (atomicidad)
+
+**Academic.Infrastructure**:
+- `Messaging/Consumers/PaymentConfirmedConsumer` — consumer thin (sin lógica de negocio), despacha el command
+- `DependencyInjection.cs` — `AddConsumer<PaymentConfirmedConsumer>()` en DI de producción (ADR-042)
+- `StudentRepository.UpdateAsync` (sin SaveChanges — UoW maneja)
+
+**Academic.Tests**:
+- `AcademicWebApplicationFactory` — `AddConsumer<PaymentConfirmedConsumer>()` en el TestHarness (ADR-042, segundo call site obligatorio)
+- 8 unit tests `ConfirmStudentPaymentCommandHandlerTests`
+- 4 integration tests activos + 2 skipped `PaymentConfirmedConsumerIntegrationTests`
+
+### Decisiones (ADR-039..043)
+- **ADR-042**: el consumer DEBE registrarse en AMBOS sitios (DI producción + TestHarness). Si falta en el harness, InboxState se bypassa silenciosamente.
+- **ADR-043**: estrategia de fallback para CorrelationId null en el consumer.
+
+### Skips justificados
+- **ESC-60** (dedup por MessageId): MassTransit 8.3.6 InMemory TestHarness no expone API pública confirmada para forzar MessageId. Invariante documentada en el cuerpo del test; ESC-59 cubre idempotencia a nivel dominio.
+- **ESC-63** (atomicidad bajo fallo de SaveChanges): requiere interceptor de SaveChanges no presente. ESC-58 cubre el caso positivo de atomicidad.
+
+### Carry-forward a la siguiente fase
+- **WARNING-1**: handler usa `DateTime.UtcNow` directo en vez de `TimeProvider` inyectado — convención heredada de Phase 1 (EnrollStudentCommandHandler), sin regresión funcional.
+- **SUGGESTION-2**: extraer fakes compartidos a un archivo `Fakes/` para eliminar el workaround de sufijo "2" (FakeStudentRepository2, etc.).
+- **Gap de cobertura**: ESC-60/ESC-63 quedan sin test ejecutable.
+
+### Contratos congelados (sin cambios)
+`PaymentConfirmed` (5 campos consumidos), `StudentStatusUpdated` (3 campos publicados), `StudentEnrolled` (5 campos) — intactos en BuildingBlocks.Contracts.
+
+### Próximo cambio SDD
+
+`payments-service Phase 1` — publisher de `PaymentConfirmed` para cerrar el flujo e2e Payments→Academic, o `academic-service Phase 3`.
+
+---
+
+## Fase 6 — payments-service Phase 1 (LEAN: Obligation + Confirm + PaymentConfirmed publish)
+
+**Cambio**: `payments-service-phase1`
+**Estado**: COMPLETO — 45/45 tasks completadas
+**Fecha**: 2026-06-18
+**Build**: `dotnet build CampusConnect360.sln` → 0 errores
+**Tests**: 74/74 verdes (46 unit + 28 integration, Testcontainers postgres:16-alpine)
+**Verify**: passed-with-warnings — 0 CRITICAL, 2 WARNING, 1 SUGGESTION
+**Delivery**: single-PR con size:exception (~420-460 LOC, bounded context greenfield completo)
+**ADRs**: ADR-044..051
+
+### Alcance LEAN entregado (decisión explícita del usuario)
+Nuevo bounded context Payments con 4 capas. Publica el contrato congelado `PaymentConfirmed`, cerrando el loop e2e Payments→Academic (Academic Phase 2 ya lo consume).
+
+**Payments.Domain**:
+- `ObligationId` / `PaymentId` VOs (ULID via NUlid 1.7.3)
+- `ObligationStatus` (Pending/Confirmed) + `PaymentMethod` enums
+- `Obligation` aggregate que **posee** `Payment` embebido (1:1, confirmado in-place) — ADR-044
+- `Obligation.ConfirmPayment()` es `void`; idempotencia a nivel handler (ADR / Gotcha 24)
+- `PaymentConfirmedDomainEvent`
+
+**Payments.Application**:
+- `IObligationRepository` + `IUlidGenerator` ports
+- `RegisterObligationCommand` + `ConfirmPaymentCommand` (ICommand<T>) + handlers + validators
+- `GetObligations` / `GetObligationById` queries (single-wrap `IQuery<Dto>`)
+- DTOs: ObligationListItemDto, ObligationDetailDto, PaymentDto
+- `ConfirmPaymentCommandHandler` publica `PaymentConfirmed` ANTES de SaveChangesAsync (Gotcha 28)
+
+**Payments.Infrastructure**:
+- `PaymentsDbContext` (BaseDbContext + OutboxMessage + OutboxState; SIN InboxState en scope — ADR-046)
+- `ObligationConfiguration` (snake_case, OwnsOne Payment, conversiones ULID/enum)
+- `ObligationRepository` (sin SaveChanges — UoW)
+- `UlidGenerator` + design-time factory + migración `InitialPayments`
+
+**Payments.API**:
+- `Program.cs`: JWT Bearer + policy `Finanzas` + Npgsql health + dual health + public partial Program
+- `PaymentEndpoints`: POST obligations, POST obligations/{id}/confirm, GET obligations, GET obligations/{id}
+- `appsettings.json`: ConnectionStrings:PaymentsDb + Jwt + RabbitMQ
+
+**Payments.Tests**:
+- `PaymentsWebApplicationFactory` (Testcontainers + MassTransit TestHarness InMemory) + `JwtTestHelper` (Finanzas)
+- 46 unit + 28 integration tests
+
+### Decisiones LEAN (diferido a Phase 2 — ADR-045/047)
+- StudentId **confiado** (solo format check 26 chars), SIN validación cross-service.
+- SIN `StudentEnrolledConsumer` / SIN `StudentReplica` / SIN llamada síncrona Polly a Academic.
+- SIN `GET /api/payments/students`. SIN multi-tenant schoolId.
+
+### Bug pre-existente corregido (ADR-048)
+`docker-compose.yml` del payments-service usaba `ConnectionStrings__Default` + `RabbitMq__Host/User/Pass` (claves que el código ignora → fallo silencioso de RabbitMQ y DB). Corregido a `ConnectionStrings__PaymentsDb` + `RABBITMQ_HOST/USER/PASS`. Eliminado también `Services__Academic__BaseUrl` (config muerta en scope lean) y el residual `ConnectionStrings__Default` (ESC-PM-28).
+
+### Desviaciones aceptadas
+- **InboxState en migración**: MassTransit 8.x `AddEntityFrameworkOutbox<T>` añade la tabla InboxState incondicionalmente aunque `OnModelCreating` NO llame `AddInboxStateEntity()`. Inofensiva (sin uso en Phase 1), idéntica a Academic Phase 1.
+
+### Gotcha nuevo descubierto
+**Gotcha 30 — `harness.Published` NO verifica publishes vía outbox**: con `UseBusOutbox()` el relay es asíncrono y el test termina antes de que el mensaje se entregue. Para verificar que `PaymentConfirmed` se escribió, usar **raw SQL sobre la tabla `OutboxMessage`** (patrón de Academic EnrollStudent). El uso de `harness.Published` en Academic Phase 2 aplicaba al lado **consumer**, no al publish vía outbox.
+
+### Carry-forward a Payments Phase 2
+- Validación síncrona de existencia de StudentId (Polly + circuit breaker contra Academic `GET /students/{id}/status`).
+- `StudentEnrolledConsumer` + `StudentReplica` + uso real de InboxState.
+- `GET /api/payments/students`. Multi-tenant schoolId.
+- SUGGESTION-1: test de atomicidad transaccional con rollback a nivel integración.
+
+### Estado del loop e2e
+Payments publica `PaymentConfirmed` → Academic Phase 2 lo consume → transición FinancialStatus + publish StudentStatusUpdated. **El loop e2e es ahora cerrable**. Nota: el smoke test con docker compose vivo NO se ejecutó en esta sesión.
+
+### Próximo cambio SDD
+
+`payments-service Phase 2` (validación síncrona + consumer + réplica) o `academic-service Phase 3`.
