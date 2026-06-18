@@ -624,3 +624,63 @@ Payments publica `PaymentConfirmed` → Academic Phase 2 lo consume → transici
 ### Próximo cambio SDD
 
 `payments-service Phase 2` (validación síncrona + consumer + réplica) o `academic-service Phase 3`.
+
+---
+
+## Fase 7 — payments-service Phase 2 (async StudentReplica + validación StudentId + GET /students)
+
+**Cambio**: `payments-service-phase2`
+**Estado**: COMPLETO — 34/34 tasks completadas
+**Fecha**: 2026-06-18
+**Build**: `dotnet build` → 0 errores
+**Tests**: 94/94 verdes (50 de Phase 1 + 44 nuevos/modificados)
+**Verify**: passed-with-warnings — 0 CRITICAL, 2 WARNING, 2 SUGGESTION
+**ADRs**: ADR-052..059
+
+### Decisión arquitectónica central (ADR-052): Opción B — réplica asíncrona, SIN Polly
+Se descartó la validación síncrona HTTP con Polly/circuit-breaker a favor de un read model local poblado por eventos. **Cero acoplamiento en runtime** con Academic (si Academic cae, Finanzas sigue operando). Tradeoff aceptado: consistencia eventual (ventana ms-segundos, irrelevante en flujo escolar real).
+
+### Alcance entregado
+**Payments.Infrastructure**:
+- `Messaging/Consumers/StudentEnrolledConsumer` — consume `StudentEnrolled` (frozen 5 campos) → upsert de réplica. Thin. ADR-043 CorrelationId null fallback.
+- `Persistence/ReadModels/StudentReplica` — read model (NO aggregate de dominio, sin clases base de Domain) — ADR-054
+- `StudentReplicaConfiguration` (tabla `student_replicas`, snake_case, student_id PK)
+- `StudentReplicaRepository` — UPSERT load-or-create (FindAsync→update/insert) ADR-058; **llama SaveChangesAsync explícito** (ADR-057, el consumer no pasa por UnitOfWorkBehavior; atómico con InboxState vía la transacción del inbox de MassTransit)
+- `PaymentsDbContext` — descomentado `AddInboxStateEntity()` (InboxState ahora ACTIVO; estaba dormante desde Phase 1) + DbSet<StudentReplica>
+- Migración `AddStudentReplicas` — solo tabla student_replicas (InboxState ya existía en InitialPayments)
+- `DependencyInjection` — `AddConsumer<StudentEnrolledConsumer>()` antes de AddCampusConnectMassTransit (ADR-042)
+
+**Payments.Application**:
+- `IStudentReplicaRepository` port (primitivos/DTOs, sin fuga de POCO/IQueryable) — Upsert/Exists/GetPaged
+- `GetStudentsQuery` (IQuery<PagedList<StudentReplicaItemDto>> single-wrap) + handler + DTOs
+- `RegisterObligationCommandHandler` — guarda de existencia: StudentId desconocido → `Error.Validation("student.not_found")` → **HTTP 400** (ADR-056, NO 404)
+
+**Payments.API**:
+- `StudentEndpoints` — `GET /api/payments/students` (Finanzas, paginado page/pageSize + grade/search) + registro en Program.cs
+
+**Payments.Tests**:
+- `StudentEnrolledConsumerTests` (raw SQL sobre student_replicas + harness Consumed, Gotcha 30; idempotencia; upsert on conflict)
+- `GetStudentsIntegrationTests` (paginación/filtro/auth) + `GetStudentsQueryHandlerTests`
+- 22 tests pre-existentes de obligations ajustados (ahora pre-siembran réplica porque RegisterObligation valida existencia)
+
+### ADR-042 dual registration (gotcha recurrente)
+`AddConsumer<StudentEnrolledConsumer>()` en AMBOS sitios: `DependencyInjection.cs` (producción) Y `PaymentsWebApplicationFactory.cs` (test harness). Omitir uno rompe prod o tests en silencio.
+
+### Desviaciones aceptadas / warnings
+- **W1**: el test de idempotencia ESC-PM-32 no aísla específicamente el dedup de InboxState (el UPSERT también garantiza fila única). Gap de cobertura, no bug → test dedicado en Phase 3.
+- **W2**: `MapError` ahora prefija `[error.code]` en el `detail` de TODOS los errores de obligation (no solo student.not_found). Inofensivo en local → follow-up Phase 3: campo `extensions.code` RFC 7807 propio.
+- `Task.Delay(800ms)` en consumer tests para esperar el commit de la TX del outbox — posible flakiness en CI lento.
+
+### Carry-forward a Payments Phase 3
+- Consumir `StudentStatusUpdated` para mantener AcademicStatus actualizado en la réplica.
+- Ciclo de vida de la réplica (delete/deactivate).
+- Campo `extensions.code` RFC 7807 a nivel infra.
+- `schoolId` multi-tenant (sigue siendo cross-cutting, cambio aparte).
+- Test dedicado de dedup InboxState (W1).
+
+### Estado del event mesh
+**Bidireccional**: Payments publica `PaymentConfirmed` → Academic lo consume (Academic Phase 2); Academic publica `StudentEnrolled` → Payments lo consume (esta fase). Nota: smoke e2e con docker compose vivo NO ejecutado en esta sesión.
+
+### Próximo cambio SDD
+
+`payments-service Phase 3` (StudentStatusUpdated consumer) o `academic-service Phase 3`.

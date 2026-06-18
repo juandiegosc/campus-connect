@@ -4,9 +4,9 @@
 Plataforma de gestión escolar con arquitectura de microservicios (.NET 10, Clean Architecture, MediatR, MassTransit, Ocelot).
 
 ## CampusConnect 360 — SDD Progress
-- **Último cambio completado**: `payments-service-phase1` — LEAN bounded context: Obligation aggregate (posee Payment embebido 1:1) + register/confirm/GET endpoints + publish de PaymentConfirmed vía outbox (45/45 tasks, 74/74 tests verdes, verify passed-with-warnings 0 CRITICAL ✅). Cierra el loop e2e Payments→Academic.
-- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 COMPLETO + `payments-service` Phase 1 COMPLETO
-- **Próximo cambio SDD**: `payments-service` Phase 2 (validación síncrona de StudentId vía Polly + StudentEnrolledConsumer + StudentReplica + GET /students) o `academic-service` Phase 3
+- **Último cambio completado**: `payments-service-phase2` — async StudentReplica (Opción B, sin Polly): StudentEnrolledConsumer + validación de StudentId en RegisterObligation (400 student.not_found) + GET /api/payments/students (34/34 tasks, 94/94 tests verdes, verify passed-with-warnings 0 CRITICAL ✅). Event mesh Payments↔Academic ahora bidireccional.
+- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 COMPLETO + `payments-service` Phase 1 + Phase 2 COMPLETO
+- **Próximo cambio SDD**: `payments-service` Phase 3 (consumir StudentStatusUpdated para sincronizar AcademicStatus en la réplica) o `academic-service` Phase 3
 - **Última actualización**: 2026-06-18
 - **Contratos congelados (one-way door)**: StudentEnrolled (5 campos), StudentStatusUpdated (3 campos), PaymentConfirmed (5 campos) — NO modificar sin PR cross-cutting
 - **BREAKING CHANGE Phase 3 Identity**: `POST /api/identity/users` ahora requiere `role=Direccion` JWT

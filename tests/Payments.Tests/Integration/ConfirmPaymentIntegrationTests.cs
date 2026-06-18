@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Payments.Application.Obligations.ConfirmPayment;
 using Payments.Application.Obligations.RegisterObligation;
 using Payments.Infrastructure.Persistence;
+using Payments.Infrastructure.Persistence.ReadModels;
 using Payments.Tests.Helpers;
 using Xunit;
 
@@ -31,14 +32,38 @@ public sealed class ConfirmPaymentIntegrationTests(PaymentsWebApplicationFactory
 
     private static string ValidStudentId() => NUlid.Ulid.NewUlid().ToString();
 
+    /// <summary>
+    /// Phase 2 update: pre-seeds a student_replicas row so RegisterObligation passes the
+    /// existence guard (ADR-056). Without this, POST obligations returns 400 student.not_found.
+    /// </summary>
     private async Task<string> RegisterObligationAsync(string? studentId = null)
     {
+        var sid = studentId ?? ValidStudentId();
+
+        // Pre-seed student replica (Phase 2 guard — ADR-056). Direct DB insert, no publish-and-wait.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var ctx = scope.ServiceProvider.GetRequiredService<PaymentsDbContext>();
+            if (!await ctx.StudentReplicas.AnyAsync(s => s.StudentId == sid))
+            {
+                ctx.StudentReplicas.Add(new StudentReplica
+                {
+                    StudentId     = sid,
+                    FullName      = "Test Student",
+                    Grade         = "5A",
+                    SchoolId      = "SCH-001",
+                    LastUpdatedAt = DateTime.UtcNow
+                });
+                await ctx.SaveChangesAsync();
+            }
+        }
+
         _client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", JwtTestHelper.CreateToken("Finanzas"));
 
         var body = new
         {
-            studentId = studentId ?? ValidStudentId(),
+            studentId = sid,
             concept   = "Mensualidad Junio",
             amount    = 150.00m,
             dueDate   = DateTime.UtcNow.AddDays(15)

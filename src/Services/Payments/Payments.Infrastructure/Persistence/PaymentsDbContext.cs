@@ -3,18 +3,22 @@ using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Payments.Domain.Obligations;
+using Payments.Infrastructure.Persistence.ReadModels;
 
 namespace Payments.Infrastructure.Persistence;
 
 /// <summary>
 /// EF Core DbContext for the Payments bounded context.
 /// Inherits domain-event dispatch and IUnitOfWork from BaseDbContext.
-/// Outbox tables: OutboxMessage + OutboxState ONLY (NO InboxState — ADR-046, ESC-PM-26).
+/// Outbox tables: OutboxMessage + OutboxState.
+/// InboxState: ACTIVE in Phase 2 (table already created by InitialPayments migration — ADR-055).
+/// StudentReplicas: NEW in Phase 2 (ADR-054 read model).
 /// Connection string key: "PaymentsDb" (fallback "Default" — Gotcha 6/29).
 /// </summary>
 public sealed class PaymentsDbContext : BaseDbContext
 {
-    public DbSet<Obligation> Obligations => Set<Obligation>();
+    public DbSet<Obligation>     Obligations     => Set<Obligation>();
+    public DbSet<StudentReplica> StudentReplicas => Set<StudentReplica>();
 
     public PaymentsDbContext(DbContextOptions<PaymentsDbContext> options, IPublisher publisher)
         : base(options, publisher)
@@ -26,10 +30,10 @@ public sealed class PaymentsDbContext : BaseDbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PaymentsDbContext).Assembly);
 
-        // CRITICAL (ADR-046, ESC-PM-26): Only OutboxMessage + OutboxState — NO InboxState.
-        // No consumer in Phase 1; InboxState added additively in Phase 2 when consumer arrives.
         modelBuilder.AddOutboxMessageEntity();   // PascalCase "OutboxMessage" table (Gotcha 4 from #176)
         modelBuilder.AddOutboxStateEntity();
-        // modelBuilder.AddInboxStateEntity(); ← intentionally absent in Phase 1
+        // ACTIVE in Phase 2 (ADR-055): InboxState table already exists in DB from InitialPayments migration.
+        // Uncommented so EF tracks the model (required for migration snapshot correctness).
+        modelBuilder.AddInboxStateEntity();
     }
 }

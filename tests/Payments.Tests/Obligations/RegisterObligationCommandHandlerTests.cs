@@ -4,7 +4,9 @@ using FluentValidation;
 using MassTransit;
 using Payments.Application.Abstractions;
 using Payments.Application.Obligations.RegisterObligation;
+using Payments.Application.Students.Shared;
 using Payments.Domain.Obligations;
+using Payments.Tests.Students;
 using Xunit;
 
 namespace Payments.Tests.Obligations;
@@ -12,14 +14,16 @@ namespace Payments.Tests.Obligations;
 /// <summary>
 /// Unit tests for RegisterObligationCommandHandler and its validator.
 /// ESC-PM-01..ESC-PM-04, REQ-PM1-01, REQ-PM1-02.
+/// Phase 2: ESC-PM-37, ESC-PM-38, REQ-PM2-04, REQ-PM2-05 (ADR-056).
 /// </summary>
 public sealed class RegisterObligationCommandHandlerTests
 {
-    private readonly FakeObligationRepository _repo = new();
-    private readonly FakeUlidGenerator        _ulid = new();
+    private readonly FakeObligationRepository     _repo     = new();
+    private readonly FakeUlidGenerator            _ulid     = new();
+    private readonly FakeStudentReplicaRepository _students = new();
 
     private RegisterObligationCommandHandler CreateHandler()
-        => new(_repo, _ulid);
+        => new(_repo, _students, _ulid);
 
     private static RegisterObligationCommand ValidCommand(string? studentId = null) =>
         new(
@@ -28,10 +32,17 @@ public sealed class RegisterObligationCommandHandlerTests
             100m,
             DateTime.UtcNow.AddDays(30));
 
+    // Phase 2 note: happy-path tests must seed a student replica first (existence guard ADR-056).
+    private const string KnownStudentId = "01234567890123456789012345";
+
+    private void SeedKnownStudent()
+        => _students.Seed(KnownStudentId, "Ana Torres", "5A", "SCH-001");
+
     [Fact]
     public async Task Handle_HappyPath_ReturnsSuccess_WithObligationIdAnd26Chars()
     {
-        var result = await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
+        SeedKnownStudent();
+        var result = await CreateHandler().Handle(ValidCommand(KnownStudentId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ObligationId.Length.Should().Be(26);
@@ -40,7 +51,8 @@ public sealed class RegisterObligationCommandHandlerTests
     [Fact]
     public async Task Handle_HappyPath_StatusIsPending()
     {
-        var result = await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
+        SeedKnownStudent();
+        var result = await CreateHandler().Handle(ValidCommand(KnownStudentId), CancellationToken.None);
 
         result.Value.Status.Should().Be("Pending");
     }
@@ -48,7 +60,8 @@ public sealed class RegisterObligationCommandHandlerTests
     [Fact]
     public async Task Handle_HappyPath_CallsAddAsync_OnRepository()
     {
-        await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
+        SeedKnownStudent();
+        await CreateHandler().Handle(ValidCommand(KnownStudentId), CancellationToken.None);
 
         _repo.Added.Should().HaveCount(1);
         _repo.SaveChangesCalled.Should().BeFalse("UoW owns commit, handler must not call SaveChanges");
@@ -97,6 +110,45 @@ public sealed class RegisterObligationCommandHandlerTests
         var result = validator.Validate(new RegisterObligationCommand(
             "01234567890123456789012345", "Concept", 100m, default));
         result.IsValid.Should().BeFalse();
+    }
+
+    // ── Phase 2: existence guard (ADR-056, REQ-PM2-04) ────────────────────────
+
+    /// <summary>
+    /// 3.1 RED: StudentId not in replica store → Failure with Error.Validation (NOT Error.NotFound).
+    /// ADR-056: Payments MapError maps Validation→400, NotFound→404. Guard MUST use Error.Validation.
+    /// </summary>
+    [Fact]
+    public async Task Handle_UnknownStudentId_ReturnsFailure_ValidationError()
+    {
+        // FakeStudentReplicaRepository starts empty — "STU-UNKNOWN" is not seeded.
+        var result = await CreateHandler().Handle(
+            ValidCommand("01234567890123456789012345"),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue("unknown student must be rejected");
+        result.Error.Code.Should().Be("student.not_found");
+        result.Error.Type.Should().Be(ErrorType.Validation,
+            "ADR-056: must be Validation so MapError returns HTTP 400 (not 404)");
+    }
+
+    /// <summary>
+    /// 3.1 RED: Known StudentId (replica row exists) → Success.
+    /// </summary>
+    [Fact]
+    public async Task Handle_KnownStudentId_ReturnsSuccess()
+    {
+        // Pre-seed the replica so ExistsAsync returns true.
+        const string studentId = "01234567890123456789012345";
+        _students.Seed(studentId, "Ana Torres", "5A", "SCH-001");
+
+        var result = await CreateHandler().Handle(
+            ValidCommand(studentId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue("known student must pass the guard");
+        result.Value.Status.Should().Be("Pending");
+        _repo.Added.Should().HaveCount(1, "obligation must be persisted");
     }
 }
 

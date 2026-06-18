@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Payments.Infrastructure.Messaging.Consumers;
 using Payments.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -18,8 +19,8 @@ namespace Payments.Tests.Integration;
 /// applies EF migrations, and replaces production MassTransit with InMemory TestHarness (ADR-033).
 /// Shared across test classes via [Collection("PaymentsPostgres")] to avoid per-test container cost.
 ///
-/// IMPORTANT — NO InboxState (ADR-046): Payments Phase 1 has no consumers.
-/// Only OutboxMessage + OutboxState tables are created by InitialPayments migration.
+/// Phase 2: InboxState is now ACTIVE (table already in DB from InitialPayments migration — ADR-055).
+/// StudentEnrolledConsumer registered (Phase 2 — ADR-042 dual registration).
 ///
 /// CRITICAL for PaymentConfirmed verification (Gotcha 28):
 /// Use harness.Published.Any&lt;PaymentConfirmed&gt;() — NOT raw SQL COUNT on OutboxMessage.
@@ -40,7 +41,7 @@ public sealed class PaymentsWebApplicationFactory
     {
         await _pg.StartAsync();
 
-        // Apply migrations once — obligations, OutboxMessage, OutboxState (NO InboxState — ADR-046)
+        // Apply all migrations: obligations, OutboxMessage, OutboxState, InboxState, student_replicas
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PaymentsDbContext>();
         await db.Database.MigrateAsync();
@@ -99,9 +100,12 @@ public sealed class PaymentsWebApplicationFactory
                 opts.UseNpgsql(_pg.GetConnectionString()));
 
             // Replace with InMemory TestHarness — keeps EF Core outbox active (ADR-033)
-            // Phase 1: no consumers, so no AddConsumer calls here (ADR-046)
+            // Phase 2 (ADR-042): StudentEnrolledConsumer BEFORE AddEntityFrameworkOutbox (R1 — order matters).
+            // Without this registration the consumer never runs in integration tests.
             services.AddMassTransitTestHarness(cfg =>
             {
+                cfg.AddConsumer<StudentEnrolledConsumer>();   // ADR-042 mirror — BEFORE outbox wiring
+
                 cfg.AddEntityFrameworkOutbox<PaymentsDbContext>(o =>
                 {
                     o.UsePostgres();

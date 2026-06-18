@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Payments.Application.Abstractions;
+using Payments.Infrastructure.Messaging.Consumers;
 using Payments.Infrastructure.Persistence;
 using Payments.Infrastructure.Persistence.Repositories;
 using Payments.Infrastructure.Services;
@@ -18,10 +19,13 @@ public static class DependencyInjection
     /// - PaymentsDbContext (connection string key "PaymentsDb" with fallback "Default")
     /// - IUnitOfWork resolved from PaymentsDbContext
     /// - IObligationRepository
+    /// - IStudentReplicaRepository (Phase 2)
     /// - IUlidGenerator (singleton)
-    /// - MassTransit EF Core outbox (NO consumers in Phase 1)
+    /// - StudentEnrolledConsumer (Phase 2 — registered BEFORE AddCampusConnectMassTransit per ADR-042)
     /// CRITICAL (ADR-038): AddCampusConnectMassTransit is on IBusRegistrationConfigurator,
     /// NOT IServiceCollection — call INSIDE AddMassTransit delegate.
+    /// CRITICAL (ADR-042): AddConsumer must come BEFORE AddCampusConnectMassTransit so
+    /// topology configuration sees all consumers when wiring endpoints.
     /// </summary>
     public static IServiceCollection AddPaymentsInfrastructure(
         this IServiceCollection services,
@@ -39,13 +43,20 @@ public static class DependencyInjection
 
         services.AddScoped<IObligationRepository, ObligationRepository>();
 
+        // Phase 2: StudentReplica repository (ADR-054 — port purity, primitives/DTOs only)
+        services.AddScoped<IStudentReplicaRepository, StudentReplicaRepository>();
+
         // ULID generator is stateless — singleton is safe (ADR-036)
         services.AddSingleton<IUlidGenerator, UlidGenerator>();
 
-        // CRITICAL (ADR-038): must be called inside AddMassTransit delegate
-        // NO consumers in Phase 1 — AddCampusConnectMassTransit wires UseBusOutbox + UsePostgres
+        // CRITICAL (ADR-038 + ADR-042): AddConsumer BEFORE AddCampusConnectMassTransit
         services.AddMassTransit(cfg =>
-            cfg.AddCampusConnectMassTransit<PaymentsDbContext>(configuration));
+        {
+            // Phase 2: StudentEnrolledConsumer — BEFORE topology wiring (ADR-042 R1)
+            cfg.AddConsumer<StudentEnrolledConsumer>();
+
+            cfg.AddCampusConnectMassTransit<PaymentsDbContext>(configuration);
+        });
 
         return services;
     }

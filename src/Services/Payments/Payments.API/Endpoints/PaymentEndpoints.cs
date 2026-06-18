@@ -83,14 +83,15 @@ public static class PaymentEndpoints
         return app;
     }
 
+    // Includes error.Code in the detail for programmatic client discrimination (e.g. student.not_found ADR-056).
     private static IResult MapError(Error error) => error.Type switch
     {
-        ErrorType.NotFound    => Results.Problem(detail: error.Message, statusCode: StatusCodes.Status404NotFound,            title: "Not Found"),
-        ErrorType.Conflict    => Results.Problem(detail: error.Message, statusCode: StatusCodes.Status409Conflict,            title: "Conflict"),
-        ErrorType.Validation  => Results.Problem(detail: error.Message, statusCode: StatusCodes.Status400BadRequest,          title: "Validation Error"),
-        ErrorType.Unauthorized=> Results.Problem(detail: error.Message, statusCode: StatusCodes.Status401Unauthorized,        title: "Unauthorized"),
-        ErrorType.Forbidden   => Results.Problem(detail: error.Message, statusCode: StatusCodes.Status403Forbidden,           title: "Forbidden"),
-        _                     => Results.Problem(detail: error.Message, statusCode: StatusCodes.Status500InternalServerError,  title: "Internal Server Error")
+        ErrorType.NotFound    => Results.Problem(detail: $"[{error.Code}] {error.Message}", statusCode: StatusCodes.Status404NotFound,            title: "Not Found"),
+        ErrorType.Conflict    => Results.Problem(detail: $"[{error.Code}] {error.Message}", statusCode: StatusCodes.Status409Conflict,            title: "Conflict"),
+        ErrorType.Validation  => Results.Problem(detail: $"[{error.Code}] {error.Message}", statusCode: StatusCodes.Status400BadRequest,          title: "Validation Error"),
+        ErrorType.Unauthorized=> Results.Problem(detail: $"[{error.Code}] {error.Message}", statusCode: StatusCodes.Status401Unauthorized,        title: "Unauthorized"),
+        ErrorType.Forbidden   => Results.Problem(detail: $"[{error.Code}] {error.Message}", statusCode: StatusCodes.Status403Forbidden,           title: "Forbidden"),
+        _                     => Results.Problem(detail: $"[{error.Code}] {error.Message}", statusCode: StatusCodes.Status500InternalServerError,  title: "Internal Server Error")
     };
 }
 

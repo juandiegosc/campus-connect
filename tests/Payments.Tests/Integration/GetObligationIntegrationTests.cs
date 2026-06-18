@@ -2,10 +2,13 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Payments.Application.Obligations.ConfirmPayment;
 using Payments.Application.Obligations.GetObligationById;
 using Payments.Application.Obligations.GetObligations;
 using Payments.Application.Obligations.RegisterObligation;
+using Payments.Infrastructure.Persistence;
+using Payments.Infrastructure.Persistence.ReadModels;
 using Payments.Tests.Helpers;
 using Xunit;
 
@@ -23,14 +26,37 @@ public sealed class GetObligationIntegrationTests(PaymentsWebApplicationFactory 
 
     private static string ValidStudentId() => NUlid.Ulid.NewUlid().ToString();
 
+    /// <summary>
+    /// Phase 2: pre-seeds student_replicas row before registering (ADR-056 existence guard).
+    /// </summary>
     private async Task<RegisterObligationResponse> RegisterAsync(string? sid = null, decimal amount = 100m, string concept = "Test Concept")
     {
+        var studentId = sid ?? ValidStudentId();
+
+        // Pre-seed student replica so existence guard passes (Phase 2 — ADR-056)
+        using (var scope = factory.Services.CreateScope())
+        {
+            var ctx = scope.ServiceProvider.GetRequiredService<PaymentsDbContext>();
+            if (!ctx.StudentReplicas.Any(s => s.StudentId == studentId))
+            {
+                ctx.StudentReplicas.Add(new StudentReplica
+                {
+                    StudentId     = studentId,
+                    FullName      = "Test Student",
+                    Grade         = "5A",
+                    SchoolId      = "SCH-001",
+                    LastUpdatedAt = DateTime.UtcNow
+                });
+                await ctx.SaveChangesAsync();
+            }
+        }
+
         _client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", JwtTestHelper.CreateToken("Finanzas"));
 
         var body = new
         {
-            studentId = sid ?? ValidStudentId(),
+            studentId = studentId,
             concept   = concept,
             amount    = amount,
             dueDate   = DateTime.UtcNow.AddDays(30)

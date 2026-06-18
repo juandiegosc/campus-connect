@@ -92,6 +92,9 @@ try
     // Obligation endpoints (all 4)
     app.MapPaymentEndpoints();
 
+    // Student replica endpoints — GET /api/payments/students (Phase 2, REQ-PM2-06)
+    app.MapStudentEndpoints();
+
     // Health checks — both routes must return 200 (ESC-PM-30, REQ-PM1-15)
     app.MapHealthChecks("/health");
     app.MapHealthChecks("/api/payments/health");
