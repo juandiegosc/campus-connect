@@ -1,3 +1,4 @@
+using Academic.Infrastructure.Messaging.Consumers;
 using Academic.Infrastructure.Persistence;
 using MassTransit;
 using MassTransit.Testing;
@@ -96,14 +97,17 @@ public sealed class AcademicWebApplicationFactory
                 opts.UseNpgsql(_pg.GetConnectionString()));
 
             // Replace with InMemory TestHarness — keeps EF Core outbox active (ADR-033)
+            // ADR-042: Consumer registered here AND in DependencyInjection.cs.
+            // InboxState dedup ONLY activates when AddConsumer is present — see ADR-042.
             services.AddMassTransitTestHarness(cfg =>
             {
+                // Phase 2: PaymentConfirmedConsumer — must also be registered in DependencyInjection.cs (ADR-042)
+                cfg.AddConsumer<PaymentConfirmedConsumer>();
                 cfg.AddEntityFrameworkOutbox<AcademicDbContext>(o =>
                 {
                     o.UsePostgres();
                     o.UseBusOutbox();
                 });
-                // No consumers in Phase 1
             });
         });
     }

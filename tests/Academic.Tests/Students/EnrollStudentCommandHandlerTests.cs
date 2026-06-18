@@ -105,12 +105,16 @@ public class EnrollStudentCommandValidatorTests
 internal sealed class FakeStudentRepository : IStudentRepository
 {
     private bool _existsResult;
-    public List<Student> AddedStudents { get; } = [];
+    private Student? _storedStudent;
+    public List<Student> AddedStudents   { get; } = [];
+    /// <summary>Captures students passed to UpdateAsync so handler tests can assert on mutations (REQ-AC2-09).</summary>
+    public List<Student> UpdatedStudents { get; } = [];
 
-    public void SetExistsResult(bool value) => _existsResult = value;
+    public void SetExistsResult(bool value)    => _existsResult   = value;
+    public void SetStoredStudent(Student? s)   => _storedStudent  = s;
 
     public Task<Student?> GetByIdAsync(StudentId id, CancellationToken ct = default)
-        => Task.FromResult<Student?>(null);
+        => Task.FromResult(_storedStudent?.Id == id ? _storedStudent : null);
 
     public Task<Student?> GetByDocumentIdAsync(DocumentId documentId, CancellationToken ct = default)
         => Task.FromResult<Student?>(null);
@@ -121,6 +125,16 @@ internal sealed class FakeStudentRepository : IStudentRepository
     public Task AddAsync(Student student, CancellationToken ct = default)
     {
         AddedStudents.Add(student);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Captures the student for assertion (ESC-54 in unit tests — no EF Core needed).
+    /// Required by REQ-AC2-09 so unit tests can verify UpdateAsync was called with the mutated student.
+    /// </summary>
+    public Task UpdateAsync(Student student, CancellationToken ct = default)
+    {
+        UpdatedStudents.Add(student);
         return Task.CompletedTask;
     }
 
@@ -144,7 +158,13 @@ internal sealed class FakeUlidGenerator : IUlidGenerator
 
 internal sealed class FakeIntegrationEventPublisher : IIntegrationEventPublisher
 {
+    /// <summary>Captures all published integration events for assertion (ESC-48..ESC-53).</summary>
+    public List<object> Published { get; } = [];
+
     public Task PublishAsync<T>(T integrationEvent, CancellationToken cancellationToken = default)
         where T : class
-        => Task.CompletedTask;
+    {
+        Published.Add(integrationEvent);
+        return Task.CompletedTask;
+    }
 }

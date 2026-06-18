@@ -139,6 +139,8 @@ internal sealed class FakeStudentRepositoryForQueries : IStudentRepository
 
     public Task AddAsync(Student student, CancellationToken ct = default) => Task.CompletedTask;
 
+    public Task UpdateAsync(Student student, CancellationToken ct = default) => Task.CompletedTask;
+
     public Task<(IReadOnlyList<Student> Items, int Total)> GetPagedAsync(
         int page, int pageSize, string? grade, string? search, CancellationToken ct = default)
         => Task.FromResult<(IReadOnlyList<Student>, int)>((_pagedItems, _pagedTotal));

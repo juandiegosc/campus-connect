@@ -28,6 +28,17 @@ internal sealed class StudentRepository(AcademicDbContext ctx) : IStudentReposit
         // NO SaveChanges — UnitOfWorkBehavior commits the transaction atomically
     }
 
+    /// <summary>
+    /// Marks the student entity as Modified so EF Core emits an UPDATE on SaveChanges.
+    /// Explicit Update() call mirrors AddAsync style and makes the intent observable in tests (Q1 resolved).
+    /// Does NOT call SaveChanges — UnitOfWorkBehavior is responsible for the transaction commit.
+    /// </summary>
+    public Task UpdateAsync(Student student, CancellationToken ct = default)
+    {
+        ctx.Students.Update(student);
+        return Task.CompletedTask;  // synchronous operation — no async needed
+    }
+
     public async Task<(IReadOnlyList<Student> Items, int Total)> GetPagedAsync(
         int page, int pageSize, string? grade, string? search, CancellationToken ct = default)
     {

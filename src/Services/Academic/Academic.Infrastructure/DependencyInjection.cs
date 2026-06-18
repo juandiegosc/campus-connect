@@ -1,5 +1,6 @@
 using Academic.Application.Abstractions;
 using Academic.Infrastructure.Messaging;
+using Academic.Infrastructure.Messaging.Consumers;
 using Academic.Infrastructure.Persistence;
 using Academic.Infrastructure.Persistence.Repositories;
 using Academic.Infrastructure.Services;
@@ -47,9 +48,14 @@ public static class DependencyInjection
         // CRITICAL (ADR-038): AddCampusConnectMassTransit is an extension on IBusRegistrationConfigurator,
         // NOT IServiceCollection. It MUST be called inside the AddMassTransit delegate.
         // Wrong pattern: services.AddCampusConnectMassTransit<AcademicDbContext>(configuration) — COMPILE ERROR
+        // ADR-042: PaymentConfirmedConsumer registered here AND in AcademicWebApplicationFactory.
+        // If adding future consumers, update BOTH sites. See also AcademicWebApplicationFactory.cs.
+        // Order matters: AddConsumer BEFORE AddCampusConnectMassTransit (topology is configured after consumers).
         services.AddMassTransit(cfg =>
-            cfg.AddCampusConnectMassTransit<AcademicDbContext>(configuration));
-        // No consumers in Phase 1 — PaymentConfirmedConsumer registered in Phase 2
+        {
+            cfg.AddConsumer<PaymentConfirmedConsumer>();  // Phase 2 addition
+            cfg.AddCampusConnectMassTransit<AcademicDbContext>(configuration);
+        });
 
         // Application port → MassTransit-backed publisher (keeps Application free of transport deps)
         services.AddScoped<IIntegrationEventPublisher, MassTransitIntegrationEventPublisher>();
