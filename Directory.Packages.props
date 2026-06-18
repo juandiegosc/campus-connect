@@ -4,6 +4,10 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <ItemGroup Label="BCrypt">
+    <PackageVersion Include="BCrypt.Net-Next" Version="4.0.3" />
+  </ItemGroup>
+
   <ItemGroup Label="MediatR + FluentValidation">
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="FluentValidation" Version="11.11.0" />
@@ -62,10 +66,16 @@
 
   <ItemGroup Label="Testing (declared, no test projects in Phase 1)">
     <PackageVersion Include="xunit.v3" Version="1.1.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageVersion Include="FluentAssertions" Version="7.2.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.4.0" />
     <PackageVersion Include="Testcontainers.RabbitMq" Version="4.4.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
+    <!-- MassTransit.TestHarness is built into MassTransit 8.x — no separate package needed -->
+  </ItemGroup>
+
+  <ItemGroup Label="ULID generation">
+    <PackageVersion Include="NUlid" Version="1.7.3" />
   </ItemGroup>
 </Project>

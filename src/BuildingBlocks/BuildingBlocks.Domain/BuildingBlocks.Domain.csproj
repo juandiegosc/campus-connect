@@ -4,4 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- MediatR.Contracts provides INotification — Domain events must satisfy MediatR's IPublisher contract -->
+    <PackageReference Include="MediatR" />
+  </ItemGroup>
+
 </Project>

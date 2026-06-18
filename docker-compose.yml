@@ -168,9 +168,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Default: "Host=academic-db;Port=5432;Database=academic_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_USER:-guest}
-      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      ConnectionStrings__AcademicDb: "Host=academic-db;Port=5432;Database=academic_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
