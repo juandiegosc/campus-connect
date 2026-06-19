@@ -249,4 +249,47 @@ public class StudentAggregateTests
         student.FinancialStatus.Should().Be(FinancialStatus.Paid);
         student.DomainEvents.Should().BeEmpty();
     }
+
+    // ── Phase 3: MarkOverdue (ADR-063) ──
+
+    [Fact]
+    public void Student_MarkOverdue_FromPending_TransitionsToOverdue_RaisesEvent()
+    {
+        var student = BuildValidStudent();   // starts Pending
+        student.ClearDomainEvents();
+
+        student.MarkOverdue(DateTime.UtcNow);
+
+        student.FinancialStatus.Should().Be(FinancialStatus.Overdue);
+        student.DomainEvents.Should().ContainSingle();
+        student.DomainEvents.First().Should()
+            .BeOfType<Academic.Domain.Students.Events.StudentFinancialStatusChangedDomainEvent>();
+    }
+
+    [Fact]
+    public void Student_MarkOverdue_AlreadyOverdue_Idempotent_NoEvent()
+    {
+        var student = BuildValidStudent();
+        student.MarkOverdue(DateTime.UtcNow);   // Pending → Overdue
+        student.ClearDomainEvents();
+
+        student.MarkOverdue(DateTime.UtcNow);   // idempotent no-op
+
+        student.FinancialStatus.Should().Be(FinancialStatus.Overdue);
+        student.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Student_MarkOverdue_WhenPaid_Throws()
+    {
+        var student = BuildValidStudent();
+        student.ConfirmPayment(DateTime.UtcNow);   // Pending → Paid
+        student.ClearDomainEvents();
+
+        var act = () => student.MarkOverdue(DateTime.UtcNow);
+
+        act.Should().Throw<Exception>();
+        student.FinancialStatus.Should().Be(FinancialStatus.Paid);
+        student.DomainEvents.Should().BeEmpty();
+    }
 }

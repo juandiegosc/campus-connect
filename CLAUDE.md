@@ -4,9 +4,9 @@
 Plataforma de gestión escolar con arquitectura de microservicios (.NET 10, Clean Architecture, MediatR, MassTransit, Ocelot).
 
 ## CampusConnect 360 — SDD Progress
-- **Último cambio completado**: `payments-service-phase3` — StudentStatusUpdatedConsumer sincroniza academic_status + financial_status en la réplica local (no-op+warn si la fila no existe, ADR-060) + GET /students expone los status (100/100 tests verdes, 0 CRITICAL ✅).
-- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 COMPLETO + `payments-service` Phase 1 + Phase 2 + Phase 3 COMPLETO
-- **Próximo cambio SDD**: `academic-service` Phase 3, o consolidar otro bounded context (Attendance/Notifications)
+- **Último cambio completado**: `academic-service-phase3` — operación MarkOverdue: transiciona FinancialStatus→Overdue (POST /api/academic/students/{id}/mark-overdue, SecretariaOrDireccion) y publica StudentStatusUpdated vía outbox (72/74 tests verdes + 2 skips, 0 CRITICAL ✅).
+- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 + Phase 3 COMPLETO + `payments-service` Phase 1 + Phase 2 + Phase 3 COMPLETO
+- **Próximo cambio SDD**: academic-lifecycle (Suspend/Reactivate/Graduate) o consolidar otro bounded context (Attendance/Notifications/Analytics)
 - **Última actualización**: 2026-06-19
 - **Contratos congelados (one-way door)**: StudentEnrolled (5 campos), StudentStatusUpdated (3 campos), PaymentConfirmed (5 campos) — NO modificar sin PR cross-cutting
 - **BREAKING CHANGE Phase 3 Identity**: `POST /api/identity/users` ahora requiere `role=Direccion` JWT

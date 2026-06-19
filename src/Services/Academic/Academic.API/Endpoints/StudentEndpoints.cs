@@ -3,6 +3,7 @@ using Academic.Application.Students.GetStudentById;
 using Academic.Application.Students.GetStudentEvents;
 using Academic.Application.Students.GetStudentStatus;
 using Academic.Application.Students.GetStudents;
+using Academic.Application.Students.MarkOverdue;
 using BuildingBlocks.Application.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -118,6 +119,25 @@ public static class StudentEndpoints
         .WithName("GetStudentEvents")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden);
+
+        // POST /api/academic/students/{id}/mark-overdue — Secretaria or Direccion (Phase 3, ADR-064)
+        group.MapPost("/{id}/mark-overdue", async (
+            string id,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var result = await sender.Send(new MarkStudentOverdueCommand(id), ct);
+            return result.IsSuccess
+                ? Results.Ok()
+                : MapError(result.Error);
+        })
+        .RequireAuthorization("SecretariaOrDireccion")
+        .WithName("MarkStudentOverdue")
+        .Produces(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden);
 

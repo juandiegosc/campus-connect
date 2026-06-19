@@ -89,4 +89,28 @@ public sealed class Student : AggregateRoot<StudentId>
             FinancialStatus.ToString(),
             nowUtc));
     }
+
+    /// <summary>
+    /// Transitions FinancialStatus to Overdue (Phase 3 — ADR-063).
+    /// Pending → Overdue (raises <see cref="StudentFinancialStatusChangedDomainEvent"/>).
+    /// Overdue → idempotent no-op (no event). Paid → invalid transition (DomainException);
+    /// the application handler guards this case and returns 409 Conflict before reaching here.
+    /// </summary>
+    public void MarkOverdue(DateTime nowUtc)
+    {
+        if (FinancialStatus == FinancialStatus.Overdue)
+            return; // idempotent — no-op
+
+        if (FinancialStatus == FinancialStatus.Paid)
+            throw new DomainException("A student with Paid financial status cannot be marked overdue.");
+
+        var oldStatus = FinancialStatus; // Pending
+        FinancialStatus = FinancialStatus.Overdue;
+
+        Raise(new StudentFinancialStatusChangedDomainEvent(
+            Id.Value,
+            oldStatus.ToString(),
+            FinancialStatus.ToString(),
+            nowUtc));
+    }
 }

@@ -723,3 +723,47 @@ Se descartó la validación síncrona HTTP con Polly/circuit-breaker a favor de 
 
 ### Próximo cambio SDD
 `academic-service Phase 3` o consolidar otro bounded context (Attendance/Notifications).
+
+---
+
+## Fase 9 — academic-service Phase 3 (MarkOverdue: FinancialStatus.Overdue transition)
+
+**Cambio**: `academic-service-phase3`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-19
+**Tests**: 72/74 verdes (2 skips pre-existentes ESC-60/ESC-63; +10 nuevos: 3 dominio, 4 handler, 3 integración)
+**ADRs**: ADR-063, ADR-064
+
+> Nota de ejecución: ciclo hecho INLINE por el orquestador (límite de cuenta de sub-agentes activo). Trail en engram: proposal #215, apply-progress/archive #216.
+
+### Alcance (elegido por el usuario): solo MORA FINANCIERA
+Operación `MarkOverdue` que transiciona `FinancialStatus` → Overdue y publica `StudentStatusUpdated` (congelado) vía outbox. (La opción de ciclo de vida académico Suspend/Graduate quedó descartada para esta fase.)
+
+### Alcance entregado
+**Academic.Domain** — `Student.MarkOverdue(nowUtc)`:
+- Pending → Overdue (raise StudentFinancialStatusChangedDomainEvent)
+- Overdue → no-op idempotente (sin evento)
+- Paid → DomainException (defensa; el handler lo guarda con 409 antes)
+
+**Academic.Application** — `MarkOverdue/`:
+- `MarkStudentOverdueCommand(string StudentId) : ICommand` (HTTP-triggered, sin CorrelationId — espeja EnrollStudent) + validator (NotEmpty + Length 26)
+- Handler: load→404; si Paid → Result.Failure(Conflict "student.already_paid"); MarkOverdue; UpdateAsync; publish StudentStatusUpdated ANTES de SaveChanges (Gotcha 28)
+
+**Academic.API**:
+- `POST /api/academic/students/{id}/mark-overdue` — policy `SecretariaOrDireccion` (ADR-064, sin rol Finanzas nuevo en Academic). 200 / 404 / 409 / 401 / 403.
+
+**Academic.Tests**: 3 dominio (StudentDomainTests), 4 handler (reusa FakeStudentRepository2/FakeIntegrationEventPublisher2 del mismo namespace), 3 integración (happy 200+Overdue+fila outbox, 401, 403).
+
+### Decisiones
+- **ADR-063**: semántica MarkOverdue (Pending→Overdue, Overdue idempotente, Paid→409 Conflict).
+- **ADR-064**: endpoint bajo policy existente SecretariaOrDireccion (sin scope creep de roles).
+
+### Gotcha confirmado (refina Gotcha 30)
+Para publishes vía outbox en path **HTTP** (no consumer): assertar sobre la tabla `"OutboxMessage"` por raw SQL (MessageType LIKE %StudentStatusUpdated% AND Body LIKE %studentId%), NO `harness.Published` — el path HTTP stagea pero no entrega prontamente al bus in-memory del harness (a diferencia del path consumer que espera `Consumed`). Espeja el patrón de EnrollStudent.
+
+### Carry-forward
+- Ciclo de vida académico (Suspend/Reactivate/Graduate sobre AcademicStatus) — opción descartada de esta fase, candidata a fase futura.
+- Barrido masivo/programado de mora (job sobre fechas de vencimiento). schoolId multi-tenant.
+
+### Próximo cambio SDD
+academic-lifecycle o consolidar Attendance/Notifications/Analytics.
