@@ -152,7 +152,7 @@ services:
       ConnectionStrings__Default: "Host=identity-db;Port=5432;Database=identity_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       identity-db:
         condition: service_healthy
@@ -174,7 +174,7 @@ services:
       RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       academic-db:
         condition: service_healthy
@@ -197,7 +197,7 @@ services:
       RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       payments-db:
         condition: service_healthy
@@ -221,7 +221,7 @@ services:
       RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       attendance-db:
         condition: service_healthy
@@ -244,7 +244,7 @@ services:
       RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       notifications-db:
         condition: service_healthy
@@ -267,7 +267,7 @@ services:
       RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       analytics-db:
         condition: service_healthy
@@ -291,7 +291,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
-      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
     depends_on:
       - identity-service
       - academic-service

@@ -27,16 +27,17 @@ dotnet build CampusConnect360.sln
 # Restaurar paquetes
 dotnet restore CampusConnect360.sln
 
-# Arrancar infraestructura local (sin conflictos de puertos)
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# Arrancar TODO el sistema (Gateway + servicios + infra) — ⚠️ --profile services OBLIGATORIO
+docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services up -d --build
 
-# Arrancar todos los servicios incluyendo Gateway
-docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services up -d
+# Arrancar SOLO infraestructura (DB + RabbitMQ) — para correr servicios desde el IDE
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 
 # Probar salud del sistema completo
 curl http://localhost:8080/health
 curl http://localhost:8080/api/identity/health
 ```
+> ⚠️ El Gateway y los servicios están detrás de `profiles: ["services"]`. Sin `--profile services` SOLO se levanta la infraestructura (el Gateway "no aparece"). Guía completa: `docs/DEPLOYMENT.md`.
 
 ## Soluciones (.sln)
 
