@@ -3,7 +3,10 @@ using Academic.Application.Students.GetStudentById;
 using Academic.Application.Students.GetStudentEvents;
 using Academic.Application.Students.GetStudentStatus;
 using Academic.Application.Students.GetStudents;
+using Academic.Application.Students.GraduateStudent;
 using Academic.Application.Students.MarkOverdue;
+using Academic.Application.Students.ReactivateStudent;
+using Academic.Application.Students.SuspendStudent;
 using BuildingBlocks.Application.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +15,8 @@ namespace Academic.API.Endpoints;
 
 /// <summary>
 /// Minimal API endpoint definitions for Academic student management.
-/// 5 endpoints per docs/02 §2 and REQ-AC1-21..REQ-AC1-26.
+/// 9 endpoints: 5 enroll/read (docs/02 §2, REQ-AC1-21..26) + mark-overdue (Phase 3)
+/// + suspend/reactivate/graduate academic lifecycle (Phase 4).
 /// IHttpContextAccessor MUST NOT appear in this file — claims are read from HttpContext directly.
 /// </summary>
 public static class StudentEndpoints
@@ -135,6 +139,64 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("MarkStudentOverdue")
+        .Produces(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden);
+
+        // POST /api/academic/students/{id}/suspend — SecretariaOrDireccion (Phase 4, ADR-067)
+        group.MapPost("/{id}/suspend", async (
+            string id,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var result = await sender.Send(new SuspendStudentCommand(id), ct);
+            return result.IsSuccess
+                ? Results.Ok()
+                : MapError(result.Error);
+        })
+        .RequireAuthorization("SecretariaOrDireccion")
+        .WithName("SuspendStudent")
+        .Produces(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden);
+
+        // POST /api/academic/students/{id}/reactivate — SecretariaOrDireccion (Phase 4, ADR-067)
+        group.MapPost("/{id}/reactivate", async (
+            string id,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var result = await sender.Send(new ReactivateStudentCommand(id), ct);
+            return result.IsSuccess
+                ? Results.Ok()
+                : MapError(result.Error);
+        })
+        .RequireAuthorization("SecretariaOrDireccion")
+        .WithName("ReactivateStudent")
+        .Produces(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden);
+
+        // POST /api/academic/students/{id}/graduate — Direccion ONLY (Phase 4, ADR-066/067)
+        // DEPENDS ON T-00: "Direccion" policy must be registered in Program.cs (throws at boot otherwise).
+        group.MapPost("/{id}/graduate", async (
+            string id,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GraduateStudentCommand(id), ct);
+            return result.IsSuccess
+                ? Results.Ok()
+                : MapError(result.Error);
+        })
+        .RequireAuthorization("Direccion")
+        .WithName("GraduateStudent")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)

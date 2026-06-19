@@ -767,3 +767,53 @@ Para publishes vía outbox en path **HTTP** (no consumer): assertar sobre la tab
 
 ### Próximo cambio SDD
 academic-lifecycle o consolidar Attendance/Notifications/Analytics.
+
+---
+
+## Fase 10 — academic-service Phase 4 (ciclo de vida académico: Suspend/Reactivate/Graduate)
+
+**Cambio**: `academic-service-phase4`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-19
+**Tests**: 104/106 verdes (+32 nuevos; 2 skips pre-existentes ESC-60/ESC-63)
+**Verify**: PASS — 0 CRITICAL, 0 WARNING, 1 SUGGESTION (cosmético, ya corregido)
+**ADRs**: ADR-065..068
+
+> Desarrollado y commiteado directamente en `main` (directiva del usuario: sin ramas feature). Trail SDD en engram: explore #218, proposal #219, spec #220, design #221, tasks #222, apply #223, verify #224, archive #225.
+
+### Alcance entregado
+Completa el eje `AcademicStatus` (antes solo Active). 3 operaciones de administración que publican `StudentStatusUpdated` (congelado) vía outbox:
+
+**Academic.Domain** — `Student.Suspend/Reactivate/Graduate(nowUtc)`:
+- Suspend: Active→Suspended; ya-Suspended no-op idempotente; Graduated→DomainException
+- Reactivate: Suspended→Active; ya-Active no-op idempotente; Graduated→DomainException
+- Graduate: Active|Suspended→Graduated; Graduated→DomainException (terminal)
+- **NO levantan domain event** (ADR-068, asimetría deliberada con MarkOverdue: el evento financiero no tiene consumidores internos; el handler publica StudentStatusUpdated directo)
+
+**Academic.Application** — 3 folders (SuspendStudent/ReactivateStudent/GraduateStudent): Command(ICommand) + Validator (StudentId NotEmpty+Length 26) + Handler (load→404; guard Graduated→409 antes del throw de dominio; mutate; UpdateAsync; publish StudentStatusUpdated con AcademicStatus NUEVO + FinancialStatus actual ANTES de SaveChanges).
+
+**Academic.API**:
+- `POST /api/academic/students/{id}/suspend` + `/reactivate` → `SecretariaOrDireccion`
+- `POST /api/academic/students/{id}/graduate` → `Direccion` (ADR-067)
+- Registrada policy `Direccion` en Program.cs (no existía — dependencia dura de arranque)
+
+**Academic.Tests**: 9 dominio (ESC-90..96) + ~11 handler + ~12 integración (happy 200 + academic_status raw SQL + fila OutboxMessage raw SQL; 401; 403; Graduate Secretaria→403). Reusa FakeStudentRepository2/FakeIntegrationEventPublisher2.
+
+### Decisiones (ADR-065..068)
+- **ADR-065**: 3 endpoints explícitos (no parametrizado).
+- **ADR-066**: Graduate ya-Graduated → 409 (terminal, no idempotente como los otros).
+- **ADR-067**: Graduate Direccion-only + registrar policy Direccion faltante.
+- **ADR-068**: sin domain event de academic-status (el handler publica StudentStatusUpdated directo).
+
+### Sin migración / sin cambio de contrato
+`academic_status` ya estaba mapeado (HasConversion<string>()). `StudentStatusUpdated` (congelado) sin cambios — el campo AcademicStatus ahora lleva valores ≠ Active en runtime por primera vez.
+
+### Downstream (sin cambio de código)
+La réplica de Payments (`student_replicas.academic_status`) se actualiza transparentemente vía su `StudentStatusUpdatedConsumer` (Phase 3). Suspender/graduar ahora propaga el estado a Payments.
+
+### Carry-forward
+- Barrido masivo/programado de cambios de estado. schoolId multi-tenant.
+- Bounded contexts pendientes: Attendance, Notifications, Analytics (stubs sin dominio).
+
+### Próximo cambio SDD
+Consolidar Attendance/Notifications/Analytics (greenfield) — son stubs.

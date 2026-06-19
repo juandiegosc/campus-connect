@@ -292,4 +292,136 @@ public class StudentAggregateTests
         student.FinancialStatus.Should().Be(FinancialStatus.Paid);
         student.DomainEvents.Should().BeEmpty();
     }
+
+    // ── Phase 4: Suspend (ADR-068 — no domain event) ──
+
+    /// <summary>ESC-90 — Active → Suspended sets status, no domain event (ADR-068).</summary>
+    [Fact]
+    public void Student_Suspend_FromActive_TransitionsToSuspended_NoEvent()
+    {
+        var student = BuildValidStudent();   // starts Active
+        student.ClearDomainEvents();
+
+        student.Suspend(DateTime.UtcNow);
+
+        student.AcademicStatus.Should().Be(AcademicStatus.Suspended);
+        student.DomainEvents.Should().BeEmpty("ADR-068: Suspend raises no domain event");
+    }
+
+    /// <summary>ESC-91 — Already Suspended is idempotent no-op, no event, no throw.</summary>
+    [Fact]
+    public void Student_Suspend_AlreadySuspended_IsNoOp_NoEvent()
+    {
+        var student = BuildValidStudent();
+        typeof(Student).GetProperty(nameof(Student.AcademicStatus))!.SetValue(student, AcademicStatus.Suspended);
+        student.ClearDomainEvents();
+
+        student.Suspend(DateTime.UtcNow);   // idempotent no-op
+
+        student.AcademicStatus.Should().Be(AcademicStatus.Suspended);
+        student.DomainEvents.Should().BeEmpty();
+    }
+
+    /// <summary>ESC-92 — Graduated → DomainException, status unchanged.</summary>
+    [Fact]
+    public void Student_Suspend_WhenGraduated_Throws_StatusUnchanged()
+    {
+        var student = BuildValidStudent();
+        typeof(Student).GetProperty(nameof(Student.AcademicStatus))!.SetValue(student, AcademicStatus.Graduated);
+        student.ClearDomainEvents();
+
+        var act = () => student.Suspend(DateTime.UtcNow);
+
+        act.Should().Throw<Exception>();
+        student.AcademicStatus.Should().Be(AcademicStatus.Graduated);
+        student.DomainEvents.Should().BeEmpty();
+    }
+
+    // ── Phase 4: Reactivate (ADR-068 — no domain event) ──
+
+    /// <summary>ESC-93 — Suspended → Active sets status, no domain event (ADR-068).</summary>
+    [Fact]
+    public void Student_Reactivate_FromSuspended_TransitionsToActive_NoEvent()
+    {
+        var student = BuildValidStudent();
+        typeof(Student).GetProperty(nameof(Student.AcademicStatus))!.SetValue(student, AcademicStatus.Suspended);
+        student.ClearDomainEvents();
+
+        student.Reactivate(DateTime.UtcNow);
+
+        student.AcademicStatus.Should().Be(AcademicStatus.Active);
+        student.DomainEvents.Should().BeEmpty("ADR-068: Reactivate raises no domain event");
+    }
+
+    /// <summary>ESC-94 — Already Active is idempotent no-op, no event, no throw.</summary>
+    [Fact]
+    public void Student_Reactivate_AlreadyActive_IsNoOp_NoEvent()
+    {
+        var student = BuildValidStudent();   // starts Active
+        student.ClearDomainEvents();
+
+        student.Reactivate(DateTime.UtcNow);   // idempotent no-op
+
+        student.AcademicStatus.Should().Be(AcademicStatus.Active);
+        student.DomainEvents.Should().BeEmpty();
+    }
+
+    /// <summary>ESC-95 (Reactivate path) — Graduated → DomainException, status unchanged.</summary>
+    [Fact]
+    public void Student_Reactivate_WhenGraduated_Throws_StatusUnchanged()
+    {
+        var student = BuildValidStudent();
+        typeof(Student).GetProperty(nameof(Student.AcademicStatus))!.SetValue(student, AcademicStatus.Graduated);
+        student.ClearDomainEvents();
+
+        var act = () => student.Reactivate(DateTime.UtcNow);
+
+        act.Should().Throw<Exception>();
+        student.AcademicStatus.Should().Be(AcademicStatus.Graduated);
+        student.DomainEvents.Should().BeEmpty();
+    }
+
+    // ── Phase 4: Graduate (ADR-066 terminal, ADR-068 no event) ──
+
+    /// <summary>ESC-95a — Active → Graduated sets status, no domain event (ADR-068).</summary>
+    [Fact]
+    public void Student_Graduate_FromActive_TransitionsToGraduated_NoEvent()
+    {
+        var student = BuildValidStudent();   // starts Active
+        student.ClearDomainEvents();
+
+        student.Graduate(DateTime.UtcNow);
+
+        student.AcademicStatus.Should().Be(AcademicStatus.Graduated);
+        student.DomainEvents.Should().BeEmpty("ADR-068: Graduate raises no domain event");
+    }
+
+    /// <summary>ESC-95b — Suspended → Graduated sets status, no domain event.</summary>
+    [Fact]
+    public void Student_Graduate_FromSuspended_TransitionsToGraduated_NoEvent()
+    {
+        var student = BuildValidStudent();
+        typeof(Student).GetProperty(nameof(Student.AcademicStatus))!.SetValue(student, AcademicStatus.Suspended);
+        student.ClearDomainEvents();
+
+        student.Graduate(DateTime.UtcNow);
+
+        student.AcademicStatus.Should().Be(AcademicStatus.Graduated);
+        student.DomainEvents.Should().BeEmpty();
+    }
+
+    /// <summary>ESC-96 — Already Graduated → DomainException (TERMINAL — NOT idempotent, ADR-066).</summary>
+    [Fact]
+    public void Student_Graduate_WhenAlreadyGraduated_Throws()
+    {
+        var student = BuildValidStudent();
+        typeof(Student).GetProperty(nameof(Student.AcademicStatus))!.SetValue(student, AcademicStatus.Graduated);
+        student.ClearDomainEvents();
+
+        var act = () => student.Graduate(DateTime.UtcNow);
+
+        act.Should().Throw<Exception>("ESC-96: re-graduating is a terminal 409, not an idempotent no-op (ADR-066)");
+        student.AcademicStatus.Should().Be(AcademicStatus.Graduated);
+        student.DomainEvents.Should().BeEmpty();
+    }
 }

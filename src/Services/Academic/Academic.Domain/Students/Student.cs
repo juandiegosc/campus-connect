@@ -113,4 +113,52 @@ public sealed class Student : AggregateRoot<StudentId>
             FinancialStatus.ToString(),
             nowUtc));
     }
+
+    /// <summary>
+    /// Transitions AcademicStatus to Suspended (Phase 4 — ADR-068).
+    /// Active → Suspended. Suspended → idempotent no-op (no event).
+    /// Graduated → invalid transition (DomainException); handler guards → 409 before reaching here.
+    /// Raises NO domain event (ADR-068 — deliberate asymmetry with financial transitions).
+    /// </summary>
+    public void Suspend(DateTime nowUtc)
+    {
+        if (AcademicStatus == AcademicStatus.Suspended)
+            return;           // idempotent no-op
+
+        if (AcademicStatus == AcademicStatus.Graduated)
+            throw new DomainException("A graduated student cannot be suspended.");
+
+        AcademicStatus = AcademicStatus.Suspended;  // Active → Suspended
+    }
+
+    /// <summary>
+    /// Transitions AcademicStatus to Active (Phase 4 — ADR-068).
+    /// Suspended → Active. Active → idempotent no-op (no event).
+    /// Graduated → invalid transition (DomainException); handler guards → 409 before reaching here.
+    /// Raises NO domain event (ADR-068).
+    /// </summary>
+    public void Reactivate(DateTime nowUtc)
+    {
+        if (AcademicStatus == AcademicStatus.Active)
+            return;           // idempotent no-op
+
+        if (AcademicStatus == AcademicStatus.Graduated)
+            throw new DomainException("A graduated student cannot be reactivated.");
+
+        AcademicStatus = AcademicStatus.Active;     // Suspended → Active
+    }
+
+    /// <summary>
+    /// Transitions AcademicStatus to Graduated (Phase 4 — ADR-066, ADR-068).
+    /// Active | Suspended → Graduated (TERMINAL — re-graduating throws DomainException, ADR-066).
+    /// The handler guards already-Graduated → 409 Conflict before reaching here.
+    /// Raises NO domain event (ADR-068).
+    /// </summary>
+    public void Graduate(DateTime nowUtc)
+    {
+        if (AcademicStatus == AcademicStatus.Graduated)
+            throw new DomainException("Student is already graduated.");  // TERMINAL — NOT a no-op (ADR-066)
+
+        AcademicStatus = AcademicStatus.Graduated;  // Active | Suspended → Graduated
+    }
 }

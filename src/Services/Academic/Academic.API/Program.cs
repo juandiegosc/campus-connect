@@ -73,8 +73,9 @@ try
 
     // Authorization policies per ESC-35, ESC-36, ESC-37
     builder.Services.AddAuthorizationBuilder()
-        .AddPolicy("Secretaria",          p => p.RequireRole("Secretaria"))
-        .AddPolicy("SecretariaOrDireccion", p => p.RequireRole("Secretaria", "Direccion"));
+        .AddPolicy("Secretaria",            p => p.RequireRole("Secretaria"))
+        .AddPolicy("SecretariaOrDireccion", p => p.RequireRole("Secretaria", "Direccion"))
+        .AddPolicy("Direccion",             p => p.RequireRole("Direccion"));   // Phase 4 — ADR-067
 
     // NpgSql health check for academic-db (REQ-AC1-27)
     var connStr = builder.Configuration.GetConnectionString("AcademicDb")

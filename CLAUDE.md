@@ -4,9 +4,10 @@
 Plataforma de gestión escolar con arquitectura de microservicios (.NET 10, Clean Architecture, MediatR, MassTransit, Ocelot).
 
 ## CampusConnect 360 — SDD Progress
-- **Último cambio completado**: `academic-service-phase3` — operación MarkOverdue: transiciona FinancialStatus→Overdue (POST /api/academic/students/{id}/mark-overdue, SecretariaOrDireccion) y publica StudentStatusUpdated vía outbox (72/74 tests verdes + 2 skips, 0 CRITICAL ✅).
-- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 + Phase 3 COMPLETO + `payments-service` Phase 1 + Phase 2 + Phase 3 COMPLETO
-- **Próximo cambio SDD**: academic-lifecycle (Suspend/Reactivate/Graduate) o consolidar otro bounded context (Attendance/Notifications/Analytics)
+- **Último cambio completado**: `academic-service-phase4` — ciclo de vida académico: Suspend/Reactivate/Graduate sobre AcademicStatus (3 endpoints, Graduate=Direccion-only terminal) publicando StudentStatusUpdated vía outbox (104/106 tests verdes + 2 skips, verify PASS 0 CRITICAL ✅).
+- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1-4 COMPLETO + `payments-service` Phase 1-3 COMPLETO
+- **Próximo cambio SDD**: consolidar otro bounded context (Attendance/Notifications/Analytics) — son stubs sin dominio aún
+- **Workflow git**: trabajar SIEMPRE en `main` directamente (sin ramas feature) — directiva del usuario
 - **Última actualización**: 2026-06-19
 - **Contratos congelados (one-way door)**: StudentEnrolled (5 campos), StudentStatusUpdated (3 campos), PaymentConfirmed (5 campos) — NO modificar sin PR cross-cutting
 - **BREAKING CHANGE Phase 3 Identity**: `POST /api/identity/users` ahora requiere `role=Direccion` JWT
