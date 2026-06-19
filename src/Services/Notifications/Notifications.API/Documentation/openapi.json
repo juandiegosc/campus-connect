@@ -1,0 +1,42 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "CampusConnect 360 — Notifications API",
+    "description": "Servicio de notificaciones (store-and-forward). STUB: aún sin dominio implementado — expone solo health checks. Consumirá eventos (StudentEnrolled, PaymentConfirmed) para enviar notificaciones en una fase futura.",
+    "contact": {
+      "name": "CampusConnect 360 — Plataforma de gestión escolar"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Notifications.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/notifications/health": {
+      "get": {
+        "tags": [
+          "Notifications.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Notifications.API"
+    }
+  ]
+}

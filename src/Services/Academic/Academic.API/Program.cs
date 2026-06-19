@@ -5,6 +5,7 @@ using Academic.Infrastructure;
 using Academic.API.Endpoints;
 using BuildingBlocks.Infrastructure;
 using BuildingBlocks.Infrastructure.Correlation;
+using BuildingBlocks.Infrastructure.OpenApi;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -83,7 +84,15 @@ try
     builder.Services.AddHealthChecks()
         .AddNpgSql(connStr, name: "academic-db");
 
-    builder.Services.AddOpenApi();
+    // OpenAPI document (native .NET 10) — info + Bearer security scheme + per-endpoint auth requirements.
+    // Served at /openapi/v1.json (runtime) and emitted to Documentation/openapi.json (build time).
+    builder.Services.AddCampusConnectOpenApi(
+        title: "CampusConnect 360 — Academic API",
+        description:
+            "Gestión académica: matrícula de estudiantes, consulta, estado académico y financiero, " +
+            "transición a mora (MarkOverdue) y ciclo de vida académico (Suspend/Reactivate/Graduate). " +
+            "Publica StudentEnrolled y StudentStatusUpdated; consume PaymentConfirmed. " +
+            "Autenticación JWT Bearer (roles: Secretaria, Direccion, Docente).");
 
     var app = builder.Build();
 

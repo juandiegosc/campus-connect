@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using BuildingBlocks.Infrastructure;
+using BuildingBlocks.Infrastructure.OpenApi;
 using Payments.Application;
 using Payments.Infrastructure;
 using Payments.API.Endpoints;
@@ -79,7 +80,16 @@ try
     builder.Services.AddHealthChecks()
         .AddNpgSql(connStr, name: "payments-db");
 
-    builder.Services.AddOpenApi();
+    // OpenAPI document (native .NET 10) — info + Bearer security scheme + per-endpoint auth requirements.
+    // Served at /openapi/v1.json (runtime) and emitted to Documentation/openapi.json (build time).
+    builder.Services.AddCampusConnectOpenApi(
+        title: "CampusConnect 360 — Payments API",
+        description:
+            "Gestión de obligaciones de pago y confirmación de pagos para el módulo de Finanzas. " +
+            "Permite registrar obligaciones de pago por estudiante, confirmar el pago (publica el evento `PaymentConfirmed`), " +
+            "listar y consultar obligaciones por estado, y consultar la réplica local de estudiantes " +
+            "(sincronizada vía eventos `StudentEnrolled` y `StudentStatusUpdated`). " +
+            "Autenticación JWT Bearer requerida. Rol: **Finanzas**.");
 
     var app = builder.Build();
 

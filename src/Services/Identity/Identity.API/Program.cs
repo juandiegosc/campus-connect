@@ -3,6 +3,7 @@ using System.Text;
 using BuildingBlocks.Application;
 using BuildingBlocks.Infrastructure;
 using BuildingBlocks.Infrastructure.Correlation;
+using BuildingBlocks.Infrastructure.OpenApi;
 using Identity.API.Endpoints;
 using Identity.Application;
 using Identity.Infrastructure;
@@ -85,7 +86,15 @@ try
     builder.Services.AddAuthorizationBuilder()
         .AddPolicy("Direccion", p => p.RequireRole("Direccion"));
 
-    builder.Services.AddOpenApi();
+    // OpenAPI document (native .NET 10) — info + Bearer security scheme + per-endpoint auth requirements.
+    // Served at /openapi/v1.json (runtime) and emitted to Documentation/openapi.json (build time).
+    builder.Services.AddCampusConnectOpenApi(
+        title: "CampusConnect 360 — Identity API",
+        description:
+            "Autenticación y gestión de usuarios: login con JWT Bearer y refresh token rotation (rotación single-use), " +
+            "consulta del perfil del usuario autenticado vía /me (sin base de datos, desde claims del token), " +
+            "y alta de usuarios restringida al rol Direccion. " +
+            "Roles del sistema: Direccion, Secretaria, Finanzas, Docente.");
 
     // Configure JSON to accept enum values as strings (e.g., "Direccion" instead of 3)
     builder.Services.ConfigureHttpJsonOptions(opts =>

@@ -38,6 +38,12 @@ internal static class AuthEndpoints
                 });
         })
         .WithName("Login")
+        .WithSummary("Iniciar sesión y obtener tokens JWT")
+        .WithDescription(
+            "Endpoint **público** (sin Bearer). Recibe `username` y `password`. " +
+            "Devuelve un par de tokens: `accessToken` (JWT con claims sub, unique_name, name, role) " +
+            "y `refreshToken` (GUID opaco, single-use). " +
+            "401 si las credenciales son inválidas. 400 si el body no cumple la validación.")
         .Produces<LoginResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status401Unauthorized)
         .ProducesValidationProblem();
@@ -65,6 +71,11 @@ internal static class AuthEndpoints
                 });
         })
         .WithName("RefreshToken")
+        .WithSummary("Rotar refresh token y obtener nuevo par de tokens")
+        .WithDescription(
+            "Endpoint **público** (sin Bearer). Recibe el `refreshToken` opaco obtenido en login. " +
+            "Revoca el token presentado y emite un nuevo `accessToken` + `refreshToken` (rotación single-use, ADR-027). " +
+            "401 si el token no existe, fue revocado o expiró. 400 si el body no cumple la validación.")
         .Produces<LoginResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status401Unauthorized)
         .ProducesValidationProblem();

@@ -30,6 +30,14 @@ public static class PaymentEndpoints
                 : MapError(result.Error);
         })
         .WithName("RegisterObligation")
+        .WithSummary("Registrar una obligación de pago")
+        .WithDescription(
+            "Crea una nueva obligación de pago para un estudiante existente en la réplica local. " +
+            "Body: `studentId` (ULID del estudiante), `concept` (descripción del cobro), " +
+            "`amount` (monto decimal), `dueDate` (fecha límite de pago ISO-8601). " +
+            "Devuelve 201 con el `obligationId` (ULID) y `status` inicial (`Pending`). " +
+            "400 si el estudiante no existe en la réplica local o los datos son inválidos. " +
+            "Rol requerido: **Finanzas**.")
         .Produces<RegisterObligationResponse>(StatusCodes.Status201Created)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status401Unauthorized)
@@ -45,6 +53,13 @@ public static class PaymentEndpoints
                 : MapError(result.Error);
         })
         .WithName("ConfirmPayment")
+        .WithSummary("Confirmar el pago de una obligación")
+        .WithDescription(
+            "Registra el pago de una obligación pendiente y publica el evento `PaymentConfirmed` vía outbox. " +
+            "Body: `method` (método de pago, p.ej. `Transferencia`, `Efectivo`), `reference` (número de comprobante). " +
+            "Devuelve 200 con `obligationId`, `status` (`Confirmed`), `paymentId` y `confirmedAt`. " +
+            "404 si la obligación no existe. 409 si ya fue confirmada anteriormente (idempotencia). " +
+            "Rol requerido: **Finanzas**.")
         .Produces<ConfirmPaymentResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound)
@@ -61,7 +76,13 @@ public static class PaymentEndpoints
                 : MapError(result.Error);
         })
         .WithName("GetObligations")
-        .Produces(StatusCodes.Status200OK)
+        .WithSummary("Listar obligaciones de pago")
+        .WithDescription(
+            "Devuelve la lista de obligaciones de pago. Query param opcional: `status` (`Pending` o `Confirmed`). " +
+            "Sin filtro devuelve todas. 400 si el valor de `status` no es válido. " +
+            "Cada ítem incluye `obligationId`, `studentId`, `concept`, `amount`, `dueDate` y `status`. " +
+            "Rol requerido: **Finanzas**.")
+        .Produces<IReadOnlyList<ObligationListItemDto>>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden);
@@ -75,6 +96,12 @@ public static class PaymentEndpoints
                 : MapError(result.Error);
         })
         .WithName("GetObligationById")
+        .WithSummary("Obtener una obligación por id")
+        .WithDescription(
+            "Devuelve el detalle completo de una obligación: `obligationId`, `studentId`, `concept`, `amount`, " +
+            "`dueDate`, `schoolId`, `status` y, si fue pagada, el objeto `payment` con `paymentId`, `method`, " +
+            "`reference` y `confirmedAt`. 404 si el `id` no existe. " +
+            "Rol requerido: **Finanzas**.")
         .Produces<ObligationDetailDto>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status401Unauthorized)

@@ -1,0 +1,772 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "CampusConnect 360 — Academic API",
+    "description": "Gestión académica: matrícula de estudiantes, consulta, estado académico y financiero, transición a mora (MarkOverdue) y ciclo de vida académico (Suspend/Reactivate/Graduate). Publica StudentEnrolled y StudentStatusUpdated; consume PaymentConfirmed. Autenticación JWT Bearer (roles: Secretaria, Direccion, Docente).",
+    "contact": {
+      "name": "CampusConnect 360 — Plataforma de gestión escolar"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/api/academic/health": {
+      "get": {
+        "tags": [
+          "Academic.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/academic/students": {
+      "post": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Matricular un nuevo estudiante",
+        "description": "Crea un estudiante con su matrícula inicial (AcademicStatus=Active, FinancialStatus=Pending) y publica el evento `StudentEnrolled` vía outbox. `documentId` debe ser alfanumérico de 6-15 caracteres y único. Devuelve 201 con el `studentId` (ULID 26 chars) y `enrollmentId`. Rol requerido: **Secretaria**.",
+        "operationId": "EnrollStudent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollStudentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Listar estudiantes (paginado)",
+        "description": "Devuelve una página de estudiantes. Query params: `page` (default 1), `pageSize` (default 20), `grade` (filtro por grado exacto, opcional), `search` (subcadena del nombre, opcional). Rol requerido: **Secretaria** o **Direccion**.",
+        "operationId": "GetStudents",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedListOfStudentListItemDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}": {
+      "get": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Obtener un estudiante por id",
+        "description": "Devuelve el detalle completo del estudiante (datos, grado, estados, acudiente). 404 si el `id` no existe. Rol requerido: **Secretaria** o **Direccion**.",
+        "operationId": "GetStudentById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}/status": {
+      "get": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Consultar estado académico y financiero",
+        "description": "Devuelve `academicStatus` (Active|Suspended|Graduated) y `financialStatus` (Pending|Paid|Overdue). Lo consume Payments para validar al estudiante. Accesible por **cualquier usuario autenticado** (sin rol específico).",
+        "operationId": "GetStudentStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentStatusDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}/events": {
+      "get": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Listar eventos de integración del estudiante",
+        "description": "Devuelve `{ items: StudentEventDto[] }` con los eventos publicados al outbox para este estudiante (StudentEnrolled, StudentStatusUpdated). Útil para trazabilidad. Rol requerido: **Secretaria** o **Direccion**.",
+        "operationId": "GetStudentEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}/mark-overdue": {
+      "post": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Marcar al estudiante en mora",
+        "description": "Transiciona `FinancialStatus` a **Overdue** (desde Pending). Idempotente si ya está Overdue. 409 si el estudiante ya pagó (Paid). Publica `StudentStatusUpdated`. Rol: **Secretaria** o **Direccion**.",
+        "operationId": "MarkStudentOverdue",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}/suspend": {
+      "post": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Suspender al estudiante",
+        "description": "Transiciona `AcademicStatus` a **Suspended** (desde Active). Idempotente si ya está Suspended. 409 si está Graduated (terminal). Publica `StudentStatusUpdated`. Rol: **Secretaria** o **Direccion**.",
+        "operationId": "SuspendStudent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Reactivar al estudiante",
+        "description": "Transiciona `AcademicStatus` a **Active** (desde Suspended). Idempotente si ya está Active. 409 si está Graduated (terminal). Publica `StudentStatusUpdated`. Rol: **Secretaria** o **Direccion**.",
+        "operationId": "ReactivateStudent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/academic/students/{id}/graduate": {
+      "post": {
+        "tags": [
+          "Academic.Students"
+        ],
+        "summary": "Graduar al estudiante (terminal)",
+        "description": "Transiciona `AcademicStatus` a **Graduated** (estado terminal, desde Active o Suspended). 409 si ya está Graduated (no es idempotente — es one-way-door). Publica `StudentStatusUpdated`. Rol requerido: **Direccion** (operación de alto impacto).",
+        "operationId": "GraduateStudent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EnrollStudentRequest": {
+        "required": [
+          "fullName",
+          "documentId",
+          "grade",
+          "schoolId",
+          "guardianName",
+          "guardianEmail"
+        ],
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string"
+          },
+          "schoolId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "guardianName": {
+            "type": "string"
+          },
+          "guardianEmail": {
+            "type": "string"
+          }
+        }
+      },
+      "EnrollStudentResponse": {
+        "required": [
+          "studentId",
+          "enrollmentId",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "enrollmentId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "GuardianDto": {
+        "required": [
+          "name",
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "PagedListOfStudentListItemDto": {
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudentListItemDto"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "StudentDetailDto": {
+        "required": [
+          "studentId",
+          "fullName",
+          "documentId",
+          "grade",
+          "schoolId",
+          "academicStatus",
+          "financialStatus",
+          "guardian"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string"
+          },
+          "schoolId": {
+            "type": "string"
+          },
+          "academicStatus": {
+            "type": "string"
+          },
+          "financialStatus": {
+            "type": "string"
+          },
+          "guardian": {
+            "$ref": "#/components/schemas/GuardianDto"
+          }
+        }
+      },
+      "StudentListItemDto": {
+        "required": [
+          "studentId",
+          "fullName",
+          "grade",
+          "academicStatus",
+          "financialStatus"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string"
+          },
+          "academicStatus": {
+            "type": "string"
+          },
+          "financialStatus": {
+            "type": "string"
+          }
+        }
+      },
+      "StudentStatusDto": {
+        "required": [
+          "studentId",
+          "exists",
+          "academicStatus",
+          "financialStatus"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "academicStatus": {
+            "type": "string"
+          },
+          "financialStatus": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "JWT obtenido en POST /api/identity/auth/login. Enviar en el header: Authorization: Bearer {token}.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Academic.API"
+    },
+    {
+      "name": "Academic.Students"
+    }
+  ]
+}

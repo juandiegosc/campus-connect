@@ -1,3 +1,4 @@
+using BuildingBlocks.Infrastructure.OpenApi;
 using Serilog;
 using Serilog.Formatting.Compact;
 
@@ -19,7 +20,12 @@ try
            .WriteTo.Console(new RenderedCompactJsonFormatter());
     });
 
-    builder.Services.AddOpenApi();
+    builder.Services.AddCampusConnectOpenApi(
+        title: "CampusConnect 360 — Notifications API",
+        description:
+            "Servicio de notificaciones (store-and-forward). STUB: aún sin dominio implementado — " +
+            "expone solo health checks. Consumirá eventos (StudentEnrolled, PaymentConfirmed) para enviar " +
+            "notificaciones en una fase futura.");
 
     var app = builder.Build();
 

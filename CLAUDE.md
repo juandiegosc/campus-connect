@@ -100,3 +100,4 @@ curl http://localhost:8080/api/identity/health
 - Minimal APIs + OpenAPI nativo (sin Swashbuckle)
 - TreatWarningsAsErrors=true solo en src/BuildingBlocks/
 - Ocelot: rutas /health siempre sin AuthenticationOptions; rutas de negocio con Bearer
+- **Documentación OpenAPI**: cada `*.API` genera `Documentation/openapi.json` en build (OpenAPI nativo .NET 10, sin Swashbuckle) vía `AddCampusConnectOpenApi(title, description)` en `BuildingBlocks.Infrastructure.OpenApi`. Enriquecer endpoints nuevos con `.WithSummary()` + `.WithDescription()` (español) + `.WithTags()` + `.Produces<Dto>()` tipado. Ver `docs/API-DOCS.md`.

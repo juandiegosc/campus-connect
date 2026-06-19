@@ -1,0 +1,436 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "CampusConnect 360 — Attendance API",
+    "description": "Registro de asistencia e incidentes/bienestar escolar. Permite registrar asistencia diaria de estudiantes (publica AttendanceRecorded), reportar incidentes de conducta o bienestar (publica IncidentReported), consultar la réplica local de estudiantes sincronizada vía StudentEnrolled y revisar el historial completo de asistencia e incidentes por estudiante. Autenticación JWT Bearer (roles: Docente, Direccion).",
+    "contact": {
+      "name": "CampusConnect 360 — Plataforma de gestión escolar"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/api/attendance/records": {
+      "post": {
+        "tags": [
+          "Attendance.Records"
+        ],
+        "summary": "Registrar asistencia de un estudiante",
+        "description": "Crea un registro de asistencia para la fecha indicada y publica el evento `AttendanceRecorded`. `studentId` debe corresponder a un estudiante en la réplica local (400 si no existe). `date` en formato ISO `yyyy-MM-dd`. `status` valores válidos: `Present`, `Absent`, `Late`. Devuelve 201 con el `recordId` generado. Rol requerido: **Docente**.",
+        "operationId": "RecordAttendance",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordAttendanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordAttendanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/attendance/incidents": {
+      "post": {
+        "tags": [
+          "Attendance.Incidents"
+        ],
+        "summary": "Reportar un incidente de conducta o bienestar",
+        "description": "Registra un incidente para el estudiante indicado y publica el evento `IncidentReported`. `studentId` debe existir en la réplica local (400 si no existe). `type` describe la categoría del incidente (ej. `Behavior`, `Health`, `Safety`). `severity` valores válidos: `Low`, `Medium`, `High`. `description` texto libre con el detalle del incidente. Devuelve 201 con el `incidentId` generado y la `severity` registrada. Rol requerido: **Docente**.",
+        "operationId": "ReportIncident",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportIncidentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportIncidentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/attendance/students": {
+      "get": {
+        "tags": [
+          "Attendance.Students"
+        ],
+        "summary": "Listar estudiantes de la réplica local",
+        "description": "Devuelve todos los estudiantes sincronizados desde Academic vía el evento `StudentEnrolled`. La réplica incluye `studentId`, `fullName`, `grade`, `schoolId` y `lastUpdatedAt`. Rol requerido: **Docente**.",
+        "operationId": "GetAttendanceStudents",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentReplicaDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/attendance/students/{id}/history": {
+      "get": {
+        "tags": [
+          "Attendance.Students"
+        ],
+        "summary": "Obtener historial de asistencia e incidentes de un estudiante",
+        "description": "Devuelve `{ attendance: AttendanceRecordDto[], incidents: IncidentSummaryDto[] }` con todo el historial registrado para el estudiante. 404 si el `id` no existe en la réplica local. Rol requerido: **Docente** o **Direccion**.",
+        "operationId": "GetStudentHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentHistoryDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AttendanceRecordDto": {
+        "required": [
+          "recordId",
+          "studentId",
+          "date",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "string"
+          },
+          "studentId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "IncidentSummaryDto": {
+        "required": [
+          "incidentId",
+          "studentId",
+          "type",
+          "severity"
+        ],
+        "type": "object",
+        "properties": {
+          "incidentId": {
+            "type": "string"
+          },
+          "studentId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RecordAttendanceRequest": {
+        "required": [
+          "studentId",
+          "date",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "RecordAttendanceResponse": {
+        "required": [
+          "recordId",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ReportIncidentRequest": {
+        "required": [
+          "studentId",
+          "type",
+          "severity",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "ReportIncidentResponse": {
+        "required": [
+          "incidentId",
+          "severity"
+        ],
+        "type": "object",
+        "properties": {
+          "incidentId": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "StudentHistoryDto": {
+        "required": [
+          "attendance",
+          "incidents"
+        ],
+        "type": "object",
+        "properties": {
+          "attendance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttendanceRecordDto"
+            }
+          },
+          "incidents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncidentSummaryDto"
+            }
+          }
+        }
+      },
+      "StudentReplicaDto": {
+        "required": [
+          "studentId",
+          "fullName",
+          "grade",
+          "schoolId",
+          "lastUpdatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string"
+          },
+          "schoolId": {
+            "type": "string"
+          },
+          "lastUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "JWT obtenido en POST /api/identity/auth/login. Enviar en el header: Authorization: Bearer {token}.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Attendance.Records"
+    },
+    {
+      "name": "Attendance.Incidents"
+    },
+    {
+      "name": "Attendance.Students"
+    }
+  ]
+}

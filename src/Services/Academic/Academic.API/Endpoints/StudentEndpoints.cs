@@ -7,6 +7,7 @@ using Academic.Application.Students.GraduateStudent;
 using Academic.Application.Students.MarkOverdue;
 using Academic.Application.Students.ReactivateStudent;
 using Academic.Application.Students.SuspendStudent;
+using Academic.Application.Students.Shared;
 using BuildingBlocks.Application.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +48,12 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("Secretaria")
         .WithName("EnrollStudent")
+        .WithSummary("Matricular un nuevo estudiante")
+        .WithDescription(
+            "Crea un estudiante con su matrícula inicial (AcademicStatus=Active, FinancialStatus=Pending) " +
+            "y publica el evento `StudentEnrolled` vía outbox. `documentId` debe ser alfanumérico de 6-15 " +
+            "caracteres y único. Devuelve 201 con el `studentId` (ULID 26 chars) y `enrollmentId`. " +
+            "Rol requerido: **Secretaria**.")
         .Produces<EnrollStudentResponse>(StatusCodes.Status201Created)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status409Conflict)
@@ -69,7 +76,12 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("GetStudents")
-        .Produces(StatusCodes.Status200OK)
+        .WithSummary("Listar estudiantes (paginado)")
+        .WithDescription(
+            "Devuelve una página de estudiantes. Query params: `page` (default 1), `pageSize` (default 20), " +
+            "`grade` (filtro por grado exacto, opcional), `search` (subcadena del nombre, opcional). " +
+            "Rol requerido: **Secretaria** o **Direccion**.")
+        .Produces<PagedList<StudentListItemDto>>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden);
 
@@ -86,7 +98,11 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("GetStudentById")
-        .Produces(StatusCodes.Status200OK)
+        .WithSummary("Obtener un estudiante por id")
+        .WithDescription(
+            "Devuelve el detalle completo del estudiante (datos, grado, estados, acudiente). " +
+            "404 si el `id` no existe. Rol requerido: **Secretaria** o **Direccion**.")
+        .Produces<StudentDetailDto>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden);
@@ -104,7 +120,11 @@ public static class StudentEndpoints
         })
         .RequireAuthorization()  // no role policy — any authenticated user (ESC-37, G10)
         .WithName("GetStudentStatus")
-        .Produces(StatusCodes.Status200OK)
+        .WithSummary("Consultar estado académico y financiero")
+        .WithDescription(
+            "Devuelve `academicStatus` (Active|Suspended|Graduated) y `financialStatus` (Pending|Paid|Overdue). " +
+            "Lo consume Payments para validar al estudiante. Accesible por **cualquier usuario autenticado** (sin rol específico).")
+        .Produces<StudentStatusDto>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status401Unauthorized);
 
@@ -121,6 +141,10 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("GetStudentEvents")
+        .WithSummary("Listar eventos de integración del estudiante")
+        .WithDescription(
+            "Devuelve `{ items: StudentEventDto[] }` con los eventos publicados al outbox para este estudiante " +
+            "(StudentEnrolled, StudentStatusUpdated). Útil para trazabilidad. Rol requerido: **Secretaria** o **Direccion**.")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status401Unauthorized)
@@ -139,6 +163,10 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("MarkStudentOverdue")
+        .WithSummary("Marcar al estudiante en mora")
+        .WithDescription(
+            "Transiciona `FinancialStatus` a **Overdue** (desde Pending). Idempotente si ya está Overdue. " +
+            "409 si el estudiante ya pagó (Paid). Publica `StudentStatusUpdated`. Rol: **Secretaria** o **Direccion**.")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
@@ -158,6 +186,10 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("SuspendStudent")
+        .WithSummary("Suspender al estudiante")
+        .WithDescription(
+            "Transiciona `AcademicStatus` a **Suspended** (desde Active). Idempotente si ya está Suspended. " +
+            "409 si está Graduated (terminal). Publica `StudentStatusUpdated`. Rol: **Secretaria** o **Direccion**.")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
@@ -177,6 +209,10 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("SecretariaOrDireccion")
         .WithName("ReactivateStudent")
+        .WithSummary("Reactivar al estudiante")
+        .WithDescription(
+            "Transiciona `AcademicStatus` a **Active** (desde Suspended). Idempotente si ya está Active. " +
+            "409 si está Graduated (terminal). Publica `StudentStatusUpdated`. Rol: **Secretaria** o **Direccion**.")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
@@ -197,6 +233,11 @@ public static class StudentEndpoints
         })
         .RequireAuthorization("Direccion")
         .WithName("GraduateStudent")
+        .WithSummary("Graduar al estudiante (terminal)")
+        .WithDescription(
+            "Transiciona `AcademicStatus` a **Graduated** (estado terminal, desde Active o Suspended). " +
+            "409 si ya está Graduated (no es idempotente — es one-way-door). Publica `StudentStatusUpdated`. " +
+            "Rol requerido: **Direccion** (operación de alto impacto).")
         .Produces(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)

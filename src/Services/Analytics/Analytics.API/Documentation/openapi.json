@@ -1,0 +1,42 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "CampusConnect 360 — Analytics API",
+    "description": "Servicio de analítica (proyecciones de lectura). STUB: aún sin dominio implementado — expone solo health checks. Proyectará eventos del sistema (StudentEnrolled, PaymentConfirmed, AttendanceRecorded, etc.) a modelos de lectura en una fase futura.",
+    "contact": {
+      "name": "CampusConnect 360 — Plataforma de gestión escolar"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Analytics.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/analytics/health": {
+      "get": {
+        "tags": [
+          "Analytics.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Analytics.API"
+    }
+  ]
+}

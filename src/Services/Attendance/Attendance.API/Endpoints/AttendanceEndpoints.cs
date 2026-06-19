@@ -2,6 +2,7 @@ using Attendance.Application.Attendance.RecordAttendance;
 using Attendance.Application.Incidents.ReportIncident;
 using Attendance.Application.Students.GetStudentHistory;
 using Attendance.Application.Students.GetStudents;
+using Attendance.Application.Students.Shared;
 using BuildingBlocks.Application.Common;
 using MediatR;
 
@@ -29,6 +30,14 @@ public static class AttendanceEndpoints
             .RequireAuthorization("Docente")
             .WithTags("Attendance.Records")
             .WithName("RecordAttendance")
+            .WithSummary("Registrar asistencia de un estudiante")
+            .WithDescription(
+                "Crea un registro de asistencia para la fecha indicada y publica el evento `AttendanceRecorded`. " +
+                "`studentId` debe corresponder a un estudiante en la réplica local (400 si no existe). " +
+                "`date` en formato ISO `yyyy-MM-dd`. " +
+                "`status` valores válidos: `Present`, `Absent`, `Late`. " +
+                "Devuelve 201 con el `recordId` generado. " +
+                "Rol requerido: **Docente**.")
             .Produces<RecordAttendanceResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -47,6 +56,15 @@ public static class AttendanceEndpoints
             .RequireAuthorization("Docente")
             .WithTags("Attendance.Incidents")
             .WithName("ReportIncident")
+            .WithSummary("Reportar un incidente de conducta o bienestar")
+            .WithDescription(
+                "Registra un incidente para el estudiante indicado y publica el evento `IncidentReported`. " +
+                "`studentId` debe existir en la réplica local (400 si no existe). " +
+                "`type` describe la categoría del incidente (ej. `Behavior`, `Health`, `Safety`). " +
+                "`severity` valores válidos: `Low`, `Medium`, `High`. " +
+                "`description` texto libre con el detalle del incidente. " +
+                "Devuelve 201 con el `incidentId` generado y la `severity` registrada. " +
+                "Rol requerido: **Docente**.")
             .Produces<ReportIncidentResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -64,7 +82,12 @@ public static class AttendanceEndpoints
             .RequireAuthorization("Docente")
             .WithTags("Attendance.Students")
             .WithName("GetAttendanceStudents")
-            .Produces(StatusCodes.Status200OK)
+            .WithSummary("Listar estudiantes de la réplica local")
+            .WithDescription(
+                "Devuelve todos los estudiantes sincronizados desde Academic vía el evento `StudentEnrolled`. " +
+                "La réplica incluye `studentId`, `fullName`, `grade`, `schoolId` y `lastUpdatedAt`. " +
+                "Rol requerido: **Docente**.")
+            .Produces<IReadOnlyList<StudentReplicaDto>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -80,7 +103,13 @@ public static class AttendanceEndpoints
             .RequireAuthorization("DocenteOrDireccion")
             .WithTags("Attendance.Students")
             .WithName("GetStudentHistory")
-            .Produces(StatusCodes.Status200OK)
+            .WithSummary("Obtener historial de asistencia e incidentes de un estudiante")
+            .WithDescription(
+                "Devuelve `{ attendance: AttendanceRecordDto[], incidents: IncidentSummaryDto[] }` " +
+                "con todo el historial registrado para el estudiante. " +
+                "404 si el `id` no existe en la réplica local. " +
+                "Rol requerido: **Docente** o **Direccion**.")
+            .Produces<StudentHistoryDto>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);

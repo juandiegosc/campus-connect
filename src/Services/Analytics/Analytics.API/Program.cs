@@ -1,3 +1,4 @@
+using BuildingBlocks.Infrastructure.OpenApi;
 using Serilog;
 using Serilog.Formatting.Compact;
 
@@ -19,7 +20,12 @@ try
            .WriteTo.Console(new RenderedCompactJsonFormatter());
     });
 
-    builder.Services.AddOpenApi();
+    builder.Services.AddCampusConnectOpenApi(
+        title: "CampusConnect 360 — Analytics API",
+        description:
+            "Servicio de analítica (proyecciones de lectura). STUB: aún sin dominio implementado — " +
+            "expone solo health checks. Proyectará eventos del sistema (StudentEnrolled, PaymentConfirmed, " +
+            "AttendanceRecorded, etc.) a modelos de lectura en una fase futura.");
 
     var app = builder.Build();
 

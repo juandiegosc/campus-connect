@@ -36,6 +36,15 @@ public static class StudentEndpoints
                 : MapError(result.Error);
         })
         .WithName("GetPaymentStudents")
+        .WithSummary("Listar réplica local de estudiantes (paginado)")
+        .WithDescription(
+            "Devuelve la réplica local de estudiantes sincronizada vía los eventos `StudentEnrolled` y `StudentStatusUpdated`. " +
+            "Query params: `page` (default 1), `pageSize` (default 20), `grade` (filtro por grado exacto, opcional), " +
+            "`search` (subcadena del nombre, opcional). " +
+            "Cada ítem incluye `studentId`, `fullName`, `grade`, `schoolId`, `lastUpdatedAt`, " +
+            "`academicStatus` y `financialStatus` (pueden ser null en réplicas pre-fase-3). " +
+            "Útil para validar `studentId` al registrar una obligación. " +
+            "Rol requerido: **Finanzas**.")
         .Produces<PagedList<StudentReplicaItemDto>>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden);

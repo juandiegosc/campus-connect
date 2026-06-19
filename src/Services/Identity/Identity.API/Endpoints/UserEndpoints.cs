@@ -49,7 +49,15 @@ internal static class UserEndpoints
         // Bootstrap SQL: INSERT INTO users ... with role='Direccion' to seed the first admin.
         .RequireAuthorization("Direccion")
         .WithName("RegisterUser")
-        .Produces(StatusCodes.Status201Created)
+        .WithSummary("Crear un nuevo usuario del sistema")
+        .WithDescription(
+            "Requiere **Bearer JWT** con rol **Direccion**. " +
+            "Crea un usuario con `username` único, `fullName`, `password` (mínimo 8 caracteres) y `role` " +
+            "(Secretaria | Finanzas | Docente | Direccion). " +
+            "Devuelve 201 con el `id` (GUID) del usuario creado. " +
+            "409 si el `username` ya existe. 400 si los datos no superan la validación. " +
+            "401 sin token; 403 si el rol no es Direccion.")
+        .Produces<RegisterUserResponse>(StatusCodes.Status201Created)
         .ProducesValidationProblem()
         .Produces(StatusCodes.Status409Conflict)
         .Produces(StatusCodes.Status401Unauthorized)
@@ -58,6 +66,9 @@ internal static class UserEndpoints
         return app;
     }
 }
+
+/// <summary>Response body for <c>POST /api/identity/users</c> (201 Created).</summary>
+public sealed record RegisterUserResponse(Guid Id);
 
 /// <summary>
 /// Request body for <c>POST /api/identity/users</c>.

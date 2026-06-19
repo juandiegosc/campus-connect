@@ -4,6 +4,7 @@ using Attendance.Application;
 using Attendance.Infrastructure;
 using Attendance.API.Endpoints;
 using BuildingBlocks.Infrastructure;
+using BuildingBlocks.Infrastructure.OpenApi;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -79,7 +80,17 @@ try
     builder.Services.AddHealthChecks()
         .AddNpgSql(connStr, name: "attendance-db");
 
-    builder.Services.AddOpenApi();
+    // OpenAPI document (native .NET 10) — info + Bearer security scheme + per-endpoint auth requirements.
+    // Served at /openapi/v1.json (runtime) and emitted to Documentation/openapi.json (build time).
+    builder.Services.AddCampusConnectOpenApi(
+        title: "CampusConnect 360 — Attendance API",
+        description:
+            "Registro de asistencia e incidentes/bienestar escolar. " +
+            "Permite registrar asistencia diaria de estudiantes (publica AttendanceRecorded), " +
+            "reportar incidentes de conducta o bienestar (publica IncidentReported), " +
+            "consultar la réplica local de estudiantes sincronizada vía StudentEnrolled " +
+            "y revisar el historial completo de asistencia e incidentes por estudiante. " +
+            "Autenticación JWT Bearer (roles: Docente, Direccion).");
 
     var app = builder.Build();
 

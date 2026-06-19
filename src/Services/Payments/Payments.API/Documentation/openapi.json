@@ -1,0 +1,647 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "CampusConnect 360 — Payments API",
+    "description": "Gestión de obligaciones de pago y confirmación de pagos para el módulo de Finanzas. Permite registrar obligaciones de pago por estudiante, confirmar el pago (publica el evento `PaymentConfirmed`), listar y consultar obligaciones por estado, y consultar la réplica local de estudiantes (sincronizada vía eventos `StudentEnrolled` y `StudentStatusUpdated`). Autenticación JWT Bearer requerida. Rol: **Finanzas**.",
+    "contact": {
+      "name": "CampusConnect 360 — Plataforma de gestión escolar"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/api/payments/obligations": {
+      "post": {
+        "tags": [
+          "Payments.Obligations"
+        ],
+        "summary": "Registrar una obligación de pago",
+        "description": "Crea una nueva obligación de pago para un estudiante existente en la réplica local. Body: `studentId` (ULID del estudiante), `concept` (descripción del cobro), `amount` (monto decimal), `dueDate` (fecha límite de pago ISO-8601). Devuelve 201 con el `obligationId` (ULID) y `status` inicial (`Pending`). 400 si el estudiante no existe en la réplica local o los datos son inválidos. Rol requerido: **Finanzas**.",
+        "operationId": "RegisterObligation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterObligationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterObligationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Payments.Obligations"
+        ],
+        "summary": "Listar obligaciones de pago",
+        "description": "Devuelve la lista de obligaciones de pago. Query param opcional: `status` (`Pending` o `Confirmed`). Sin filtro devuelve todas. 400 si el valor de `status` no es válido. Cada ítem incluye `obligationId`, `studentId`, `concept`, `amount`, `dueDate` y `status`. Rol requerido: **Finanzas**.",
+        "operationId": "GetObligations",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ObligationListItemDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/payments/obligations/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Payments.Obligations"
+        ],
+        "summary": "Confirmar el pago de una obligación",
+        "description": "Registra el pago de una obligación pendiente y publica el evento `PaymentConfirmed` vía outbox. Body: `method` (método de pago, p.ej. `Transferencia`, `Efectivo`), `reference` (número de comprobante). Devuelve 200 con `obligationId`, `status` (`Confirmed`), `paymentId` y `confirmedAt`. 404 si la obligación no existe. 409 si ya fue confirmada anteriormente (idempotencia). Rol requerido: **Finanzas**.",
+        "operationId": "ConfirmPayment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmPaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/payments/obligations/{id}": {
+      "get": {
+        "tags": [
+          "Payments.Obligations"
+        ],
+        "summary": "Obtener una obligación por id",
+        "description": "Devuelve el detalle completo de una obligación: `obligationId`, `studentId`, `concept`, `amount`, `dueDate`, `schoolId`, `status` y, si fue pagada, el objeto `payment` con `paymentId`, `method`, `reference` y `confirmedAt`. 404 si el `id` no existe. Rol requerido: **Finanzas**.",
+        "operationId": "GetObligationById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObligationDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/payments/students": {
+      "get": {
+        "tags": [
+          "Payments.Students"
+        ],
+        "summary": "Listar réplica local de estudiantes (paginado)",
+        "description": "Devuelve la réplica local de estudiantes sincronizada vía los eventos `StudentEnrolled` y `StudentStatusUpdated`. Query params: `page` (default 1), `pageSize` (default 20), `grade` (filtro por grado exacto, opcional), `search` (subcadena del nombre, opcional). Cada ítem incluye `studentId`, `fullName`, `grade`, `schoolId`, `lastUpdatedAt`, `academicStatus` y `financialStatus` (pueden ser null en réplicas pre-fase-3). Útil para validar `studentId` al registrar una obligación. Rol requerido: **Finanzas**.",
+        "operationId": "GetPaymentStudents",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedListOfStudentReplicaItemDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConfirmPaymentRequest": {
+        "required": [
+          "method",
+          "reference"
+        ],
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfirmPaymentResponse": {
+        "required": [
+          "obligationId",
+          "status",
+          "paymentId",
+          "confirmedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "obligationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "paymentId": {
+            "type": "string"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ObligationDetailDto": {
+        "required": [
+          "obligationId",
+          "studentId",
+          "concept",
+          "amount",
+          "dueDate",
+          "schoolId",
+          "status",
+          "payment"
+        ],
+        "type": "object",
+        "properties": {
+          "obligationId": {
+            "type": "string"
+          },
+          "studentId": {
+            "type": "string"
+          },
+          "concept": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "schoolId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "payment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentDto"
+              }
+            ]
+          }
+        }
+      },
+      "ObligationListItemDto": {
+        "required": [
+          "obligationId",
+          "studentId",
+          "concept",
+          "amount",
+          "dueDate",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "obligationId": {
+            "type": "string"
+          },
+          "studentId": {
+            "type": "string"
+          },
+          "concept": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "PagedListOfStudentReplicaItemDto": {
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudentReplicaItemDto"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PaymentDto": {
+        "required": [
+          "paymentId",
+          "method",
+          "reference",
+          "confirmedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RegisterObligationRequest": {
+        "required": [
+          "studentId",
+          "concept",
+          "amount",
+          "dueDate"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "concept": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegisterObligationResponse": {
+        "required": [
+          "obligationId",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "obligationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "StudentReplicaItemDto": {
+        "required": [
+          "studentId",
+          "fullName",
+          "grade",
+          "schoolId",
+          "lastUpdatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string"
+          },
+          "schoolId": {
+            "type": "string"
+          },
+          "lastUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "academicStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "financialStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "JWT obtenido en POST /api/identity/auth/login. Enviar en el header: Authorization: Bearer {token}.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Payments.Obligations"
+    },
+    {
+      "name": "Payments.Students"
+    }
+  ]
+}

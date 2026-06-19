@@ -12,7 +12,7 @@ internal static class MeEndpoints
 {
     public static IEndpointRouteBuilder MapMeEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/identity/users").WithTags("Identity.Users");
+        var group = app.MapGroup("/api/identity/users").WithTags("Identity.Me");
 
         // GET /api/identity/users/me — requires valid Bearer JWT (ESC-60–61, REQ-P3-13)
         group.MapGet("/me", async (
@@ -44,6 +44,11 @@ internal static class MeEndpoints
         })
         .RequireAuthorization()
         .WithName("GetCurrentUser")
+        .WithSummary("Obtener perfil del usuario autenticado")
+        .WithDescription(
+            "Requiere **Bearer JWT** válido. Devuelve el perfil del usuario desde los claims del token " +
+            "(sin consulta a base de datos, ADR-028): `userId` (sub), `username` (unique_name), `fullName` (name) y `role`. " +
+            "401 si el token es inválido, expirado o faltan claims requeridos.")
         .Produces<CurrentUserResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status401Unauthorized);
 
