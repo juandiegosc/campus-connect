@@ -33,6 +33,18 @@ public interface IStudentReplicaRepository
     Task<bool> ExistsAsync(string studentId, CancellationToken ct = default);
 
     /// <summary>
+    /// Updates the academic + financial status of an existing replica row (Phase 3).
+    /// NO-OP + WARNING if no row exists for <paramref name="studentId"/> (ADR-060) — never creates a ghost row.
+    /// COMMITS internally via SaveChangesAsync (ADR-057) — consumer has no UoW pipeline.
+    /// </summary>
+    Task UpdateStatusAsync(
+        string studentId,
+        string academicStatus,
+        string financialStatus,
+        DateTime lastUpdatedAt,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Paginated read for GET /api/payments/students.
     /// Returns Application-owned DTOs + total count (port purity — ADR-054).
     /// </summary>

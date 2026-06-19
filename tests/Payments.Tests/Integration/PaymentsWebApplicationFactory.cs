@@ -104,7 +104,8 @@ public sealed class PaymentsWebApplicationFactory
             // Without this registration the consumer never runs in integration tests.
             services.AddMassTransitTestHarness(cfg =>
             {
-                cfg.AddConsumer<StudentEnrolledConsumer>();   // ADR-042 mirror — BEFORE outbox wiring
+                cfg.AddConsumer<StudentEnrolledConsumer>();        // ADR-042 mirror — BEFORE outbox wiring
+                cfg.AddConsumer<StudentStatusUpdatedConsumer>();   // Phase 3 — ADR-042 mirror
 
                 cfg.AddEntityFrameworkOutbox<PaymentsDbContext>(o =>
                 {

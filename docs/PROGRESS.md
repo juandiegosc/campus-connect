@@ -684,3 +684,42 @@ Se descartó la validación síncrona HTTP con Polly/circuit-breaker a favor de 
 ### Próximo cambio SDD
 
 `payments-service Phase 3` (StudentStatusUpdated consumer) o `academic-service Phase 3`.
+
+---
+
+## Fase 8 — payments-service Phase 3 (StudentStatusUpdated consumer + replica status sync)
+
+**Cambio**: `payments-service-phase3`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-19
+**Build**: limpio (solo warnings xUnit1051 informativos)
+**Tests**: 100/100 verdes (94 baseline Phase 2 + 6 nuevos ESC-PM-51..56)
+**ADRs**: ADR-060..062
+
+> Nota de ejecución: spec/design/apply se hicieron INLINE por el orquestador — el límite de cuenta de sub-agentes se alcanzó (4:20pm) durante la delegación de spec/design. El trail SDD completo igual quedó en engram (spec #211, design #212, apply-progress/archive #213).
+
+### Alcance entregado
+**Payments.Infrastructure**:
+- `Messaging/Consumers/StudentStatusUpdatedConsumer` — consume `StudentStatusUpdated` (frozen 3 campos) → `UpdateStatusAsync`. Thin. ADR-043 CorrelationId fallback.
+- `StudentReplica` + config: nuevas columnas nullable `academic_status` + `financial_status` (varchar(50), enum names de Academic verbatim — ADR-061)
+- `StudentReplicaRepository.UpdateStatusAsync` — **no-op + WARNING si la fila no existe** (ADR-060, nunca crea fila fantasma); SaveChanges explícito (ADR-057); inyecta ILogger
+- Migración `AddStatusColumnsToStudentReplicas` — solo las 2 columnas (sin drift de InboxState)
+
+**Payments.Application**:
+- `IStudentReplicaRepository.UpdateStatusAsync` (primitivos, ADR-054)
+- `StudentReplicaItemDto` + 2 campos nullable con default (`= null`) → no rompe sitios de 5 args; `GetPagedAsync` proyecta los 2 nuevos campos
+
+**Payments.API**: `GET /api/payments/students` ahora expone `academicStatus` + `financialStatus` (null para réplicas sin evento de status aún) — additivo, no-breaking.
+
+**Tests**: `StudentStatusUpdatedConsumerTests` (ESC-PM-51..54, helper raw SQL con columnas de status); `GetStudentsIntegrationTests` extendido (ESC-PM-55/56); fake actualizado con UpdateStatusAsync.
+
+### Decisión central (ADR-060): missing replica = no-op + WARNING
+`StudentStatusUpdated` es un overlay secundario sobre una réplica que `StudentEnrolled` posee. Si llega para un StudentId aún no replicado → log WARNING + return (sin throw, sin fault, sin fila fantasma). Problema de orden transitorio aceptable en local.
+
+### Carry-forward a Phase 4 (si aplica)
+- Ciclo de vida de réplica (delete/deactivate ante StudentWithdrawn).
+- `schoolId` multi-tenant (cross-cutting).
+- Campo `extensions.code` RFC 7807 (W2 de Phase 2, aún diferido).
+
+### Próximo cambio SDD
+`academic-service Phase 3` o consolidar otro bounded context (Attendance/Notifications).

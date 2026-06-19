@@ -145,6 +145,62 @@ public sealed class GetStudentsIntegrationTests(PaymentsWebApplicationFactory fa
         paged.Items.Should().Contain(i => i.StudentId == sid5A);
     }
 
+    // ── ESC-PM-55: GET exposes status fields when present ─────────────────────
+
+    [Fact]
+    public async Task GET_ReplicaWithStatus_ExposesStatusFields()
+    {
+        var sid   = NewStudentId();
+        var grade = "PG" + Guid.NewGuid().ToString("N")[..4].ToUpper();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var ctx = scope.ServiceProvider.GetRequiredService<PaymentsDbContext>();
+            ctx.StudentReplicas.Add(new StudentReplica
+            {
+                StudentId       = sid,
+                FullName        = "Status Student",
+                Grade           = grade,
+                SchoolId        = "SCH-001",
+                LastUpdatedAt   = DateTime.UtcNow,
+                AcademicStatus  = "Active",
+                FinancialStatus = "Paid"
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", JwtTestHelper.CreateToken("Finanzas"));
+
+        var response = await _client.GetAsync($"/api/payments/students?grade={grade}&page=1&pageSize=20");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var paged = await response.Content.ReadFromJsonAsync<PagedList<StudentReplicaItemDto>>();
+        var item  = paged!.Items.Single(i => i.StudentId == sid);
+        item.AcademicStatus.Should().Be("Active",   "ESC-PM-55: status fields must surface in GET");
+        item.FinancialStatus.Should().Be("Paid");
+    }
+
+    // ── ESC-PM-56: GET returns null status for enroll-only replicas ───────────
+
+    [Fact]
+    public async Task GET_ReplicaWithoutStatus_ReturnsNullStatusFields()
+    {
+        var sid   = NewStudentId();
+        var grade = "PG" + Guid.NewGuid().ToString("N")[..4].ToUpper();
+        await SeedReplica(sid, "NoStatus Student", grade);   // no status set
+
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", JwtTestHelper.CreateToken("Finanzas"));
+
+        var response = await _client.GetAsync($"/api/payments/students?grade={grade}&page=1&pageSize=20");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var paged = await response.Content.ReadFromJsonAsync<PagedList<StudentReplicaItemDto>>();
+        var item  = paged!.Items.Single(i => i.StudentId == sid);
+        item.AcademicStatus.Should().BeNull("ESC-PM-56: enroll-only replica has null status");
+        item.FinancialStatus.Should().BeNull();
+    }
+
     // ── ESC-PM-46: search filter by FullName substring ───────────────────────
 
     [Fact]

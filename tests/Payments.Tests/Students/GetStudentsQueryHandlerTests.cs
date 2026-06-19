@@ -120,6 +120,21 @@ internal sealed class FakeStudentReplicaRepository : IStudentReplicaRepository
     public Task<bool> ExistsAsync(string studentId, CancellationToken ct = default)
         => Task.FromResult(_store.Any(s => s.StudentId == studentId));
 
+    public Task UpdateStatusAsync(string studentId, string academicStatus, string financialStatus,
+                                  DateTime lastUpdatedAt, CancellationToken ct = default)
+    {
+        var idx = _store.FindIndex(s => s.StudentId == studentId);
+        if (idx >= 0)
+            _store[idx] = _store[idx] with
+            {
+                AcademicStatus  = academicStatus,
+                FinancialStatus = financialStatus,
+                LastUpdatedAt   = lastUpdatedAt
+            };
+        // ADR-060: no-op if absent
+        return Task.CompletedTask;
+    }
+
     public Task<(IReadOnlyList<StudentReplicaItemDto> Items, int Total)> GetPagedAsync(
         int page, int pageSize, string? grade, string? search, CancellationToken ct = default)
     {

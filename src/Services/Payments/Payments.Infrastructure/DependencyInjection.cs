@@ -55,6 +55,9 @@ public static class DependencyInjection
             // Phase 2: StudentEnrolledConsumer — BEFORE topology wiring (ADR-042 R1)
             cfg.AddConsumer<StudentEnrolledConsumer>();
 
+            // Phase 3: StudentStatusUpdatedConsumer — also BEFORE topology wiring (ADR-042)
+            cfg.AddConsumer<StudentStatusUpdatedConsumer>();
+
             cfg.AddCampusConnectMassTransit<PaymentsDbContext>(configuration);
         });
 

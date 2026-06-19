@@ -41,6 +41,15 @@ public sealed class StudentReplicaConfiguration : IEntityTypeConfiguration<Stude
             .HasColumnName("last_updated_at")
             .IsRequired();
 
+        // Phase 3 (ADR-061/062): nullable status overlay — Academic enum names verbatim.
+        b.Property(s => s.AcademicStatus)
+            .HasColumnName("academic_status")
+            .HasMaxLength(50);
+
+        b.Property(s => s.FinancialStatus)
+            .HasColumnName("financial_status")
+            .HasMaxLength(50);
+
         // Supports optional grade filter in GET /api/payments/students (ADR-059)
         b.HasIndex(s => s.Grade)
             .HasDatabaseName("ix_student_replicas_grade");

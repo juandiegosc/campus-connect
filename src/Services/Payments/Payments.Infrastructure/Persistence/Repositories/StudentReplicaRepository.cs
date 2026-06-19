@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Payments.Application.Abstractions;
 using Payments.Application.Students.Shared;
 using Payments.Infrastructure.Persistence.ReadModels;
@@ -16,7 +17,9 @@ namespace Payments.Infrastructure.Persistence.Repositories;
 /// were removed, every StudentEnrolled write would be silently discarded.
 /// The write is atomic with the InboxState row in the MassTransit EF inbox transaction.
 /// </summary>
-internal sealed class StudentReplicaRepository(PaymentsDbContext ctx) : IStudentReplicaRepository
+internal sealed class StudentReplicaRepository(
+    PaymentsDbContext                     ctx,
+    ILogger<StudentReplicaRepository>     logger) : IStudentReplicaRepository
 {
     public async Task UpsertAsync(
         string studentId,
@@ -55,6 +58,33 @@ internal sealed class StudentReplicaRepository(PaymentsDbContext ctx) : IStudent
     public Task<bool> ExistsAsync(string studentId, CancellationToken ct = default)
         => ctx.StudentReplicas.AnyAsync(s => s.StudentId == studentId, ct);
 
+    public async Task UpdateStatusAsync(
+        string studentId,
+        string academicStatus,
+        string financialStatus,
+        DateTime lastUpdatedAt,
+        CancellationToken ct = default)
+    {
+        var existing = await ctx.StudentReplicas.FindAsync([studentId], ct);
+
+        // ADR-060: StudentStatusUpdated is a secondary overlay; StudentEnrolled owns row creation.
+        // No replica yet → benign no-op + WARNING. Never create a ghost row, never throw/poison.
+        if (existing is null)
+        {
+            logger.LogWarning(
+                "StudentStatusUpdated for unknown StudentId={StudentId} — no replica row exists, skipping (ADR-060).",
+                studentId);
+            return;
+        }
+
+        existing.AcademicStatus  = academicStatus;
+        existing.FinancialStatus = financialStatus;
+        existing.LastUpdatedAt   = lastUpdatedAt;
+
+        // Do NOT remove SaveChangesAsync — consumer runs outside UoW pipeline (ADR-057).
+        await ctx.SaveChangesAsync(ct);
+    }
+
     public async Task<(IReadOnlyList<StudentReplicaItemDto> Items, int Total)> GetPagedAsync(
         int page,
         int pageSize,
@@ -77,7 +107,8 @@ internal sealed class StudentReplicaRepository(PaymentsDbContext ctx) : IStudent
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(s => new StudentReplicaItemDto(
-                s.StudentId, s.FullName, s.Grade, s.SchoolId, s.LastUpdatedAt))
+                s.StudentId, s.FullName, s.Grade, s.SchoolId, s.LastUpdatedAt,
+                s.AcademicStatus, s.FinancialStatus))
             .ToListAsync(ct);
 
         return (items, total);

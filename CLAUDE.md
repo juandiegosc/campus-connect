@@ -4,10 +4,10 @@
 Plataforma de gestión escolar con arquitectura de microservicios (.NET 10, Clean Architecture, MediatR, MassTransit, Ocelot).
 
 ## CampusConnect 360 — SDD Progress
-- **Último cambio completado**: `payments-service-phase2` — async StudentReplica (Opción B, sin Polly): StudentEnrolledConsumer + validación de StudentId en RegisterObligation (400 student.not_found) + GET /api/payments/students (34/34 tasks, 94/94 tests verdes, verify passed-with-warnings 0 CRITICAL ✅). Event mesh Payments↔Academic ahora bidireccional.
-- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 COMPLETO + `payments-service` Phase 1 + Phase 2 COMPLETO
-- **Próximo cambio SDD**: `payments-service` Phase 3 (consumir StudentStatusUpdated para sincronizar AcademicStatus en la réplica) o `academic-service` Phase 3
-- **Última actualización**: 2026-06-18
+- **Último cambio completado**: `payments-service-phase3` — StudentStatusUpdatedConsumer sincroniza academic_status + financial_status en la réplica local (no-op+warn si la fila no existe, ADR-060) + GET /students expone los status (100/100 tests verdes, 0 CRITICAL ✅).
+- **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1 + Phase 2 COMPLETO + `payments-service` Phase 1 + Phase 2 + Phase 3 COMPLETO
+- **Próximo cambio SDD**: `academic-service` Phase 3, o consolidar otro bounded context (Attendance/Notifications)
+- **Última actualización**: 2026-06-19
 - **Contratos congelados (one-way door)**: StudentEnrolled (5 campos), StudentStatusUpdated (3 campos), PaymentConfirmed (5 campos) — NO modificar sin PR cross-cutting
 - **BREAKING CHANGE Phase 3 Identity**: `POST /api/identity/users` ahora requiere `role=Direccion` JWT
 - **JWT signing key convention**: `campus-connect-dev-placeholder-key-32b` (idéntico en Identity.API, Academic.API y Gateway — NUNCA cambiar uno sin el otro)
