@@ -817,3 +817,60 @@ La réplica de Payments (`student_replicas.academic_status`) se actualiza transp
 
 ### Próximo cambio SDD
 Consolidar Attendance/Notifications/Analytics (greenfield) — son stubs.
+
+---
+
+## Fase 11 — attendance-service Phase 1 (bounded context completo: asistencia + incidentes + réplica)
+
+**Cambio**: `attendance-service-phase1`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-19
+**Tests**: 56/56 verdes (25 unit + 31 integración). Solución completa compila (0 errores).
+**Verify**: passed-with-warnings — 0 CRITICAL, 1 WARNING, 2 SUGGESTION
+**ADRs**: ADR-069..075
+**Alcance**: COMPLETO (con réplica) — elegido por el usuario
+
+> Desarrollado y commiteado directamente en `main`. Trail SDD: explore #227, proposal #228, spec #230, design #229, tasks #231, apply #232, verify #234, archive #235.
+
+### Contratos congelados POBLADOS (one-way door, ADR-070)
+Estaban vacíos; ahora LOCKED:
+- `AttendanceRecorded`: RecordId, StudentId, Date (ISO string), Status (Present|Absent|Late)
+- `IncidentReported`: IncidentId, StudentId, Type, Severity (Low|Medium|High)
+- `description` se guarda en la entidad Incident pero NO se publica.
+
+### Alcance entregado (mirror Payments P1+P2)
+**Attendance.Domain** (ADR-069 — 2 agregados independientes, sin relación padre-hijo):
+- `AttendanceRecord` (AttendanceRecordId ULID VO, StudentId, Date DateOnly, AttendanceStatus enum, RecordedAt) → AttendanceRecordedDomainEvent
+- `Incident` (IncidentId ULID VO, StudentId, Type, IncidentSeverity enum, Description, ReportedAt) → IncidentReportedDomainEvent
+
+**Attendance.Application**: RecordAttendance + ReportIncident commands (guard StudentId existe en réplica → 400 student.not_found; publish ANTES de SaveChanges, ADR-075/Gotcha 28) + GetStudents + GetStudentHistory queries (IQuery single-wrap) + ports + validators.
+
+**Attendance.Infrastructure**: AttendanceDbContext (Outbox+OutboxState+InboxState), configs snake_case, repos, `StudentEnrolledConsumer` (réplica), UlidGenerator, design-time factory, migración `InitialAttendance` (6 tablas: attendance_records, incidents, student_replicas, OutboxMessage, OutboxState, InboxState). ADR-042 dual registration (DI + WAF).
+
+**Attendance.API**: Program.cs (JWT + policies Docente/DocenteOrDireccion + health + public partial Program) + 4 endpoints:
+- `POST /api/attendance/records` (Docente)
+- `POST /api/attendance/incidents` (Docente)
+- `GET /api/attendance/students` (Docente)
+- `GET /api/attendance/students/{id}/history` (DocenteOrDireccion)
+
+**Attendance.Tests**: AttendanceWebApplicationFactory (Testcontainers + TestHarness), JwtTestHelper, 25 unit + 31 integración (outbox vía raw SQL sobre "OutboxMessage").
+
+### Decisiones nuevas
+- **ADR-074**: `Date` como `DateOnly` mapeado nativo en Npgsql 10 (sin converter); handler parsea ISO string → 400 si malformado; evento publica "yyyy-MM-dd".
+- **ADR-075**: los agregados levantan domain event (intención) pero el HANDLER publica el integration event inline ANTES de SaveChanges (atomicidad — el dispatch post-save rompería la TX del outbox).
+
+### Bug pre-existente corregido (ADR-072)
+docker-compose attendance-service usaba `RabbitMq__Host/User/Pass` (ignoradas) → corregido a `RABBITMQ_HOST/USER/PASS` + `ConnectionStrings__AttendanceDb`. (Notifications y Analytics tienen el mismo bug — pendiente cuando se implementen.)
+
+### Desviación aceptada / warnings
+- **WARNING REQ-AT1-31**: el upsert de StudentReplica usa EF FindAsync+branch (consistente con Payments ADR-058 load-or-create, seguro bajo dedup de InboxState) en vez de raw `ON CONFLICT` SQL. No bloqueante en local; follow-up futuro.
+- SUGGESTIONS: Task.Delay(800ms) en test de consumer (frágil en CI lento); 285 warnings xUnit1051 pre-existentes en Payments.Tests.
+
+### Carry-forward
+- Lifecycle de corrección/borrado de asistencia; paginación en history; upsert ON CONFLICT; consumir StudentStatusUpdated para reflejar estado académico en la réplica de Attendance. schoolId multi-tenant.
+
+### Estado del sistema
+Los 6 servicios de negocio con dominio: Identity, Academic (P1-4), Payments (P1-3), **Attendance (P1)**. Pendientes: **Notifications, Analytics** (stubs).
+
+### Próximo cambio SDD
+Notifications o Analytics (greenfield).
