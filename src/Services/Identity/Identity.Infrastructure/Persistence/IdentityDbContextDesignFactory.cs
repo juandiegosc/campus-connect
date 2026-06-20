@@ -16,7 +16,7 @@ internal sealed class IdentityDbContextDesignFactory : IDesignTimeDbContextFacto
     public IdentityDbContext CreateDbContext(string[] args)
     {
         var connStr = Environment.GetEnvironmentVariable("ConnectionStrings__Default")
-                      ?? "Host=localhost;Port=5432;Database=identity_db;Username=postgres;Password=postgres";
+                      ?? "Host=localhost;Port=5438;Database=identity_db;Username=campus;Password=campus";
 
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
             .UseNpgsql(connStr)

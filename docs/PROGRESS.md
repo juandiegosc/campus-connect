@@ -116,7 +116,8 @@ Cada stub: `builder.Services.AddOpenApi()` + `app.MapOpenApi()` + `MapGet("/heal
 
 | Archivo | Descripción |
 |---|---|
-| `docker-compose.local.yml` | Override local: elimina host port bindings conflictivos de rabbitmq (5672/15672) e identity-db (5433) para entornos con otros proyectos activos |
+| `docker-compose.local.yml` | Override local: elimina el host port binding de rabbitmq (5672/15672) para entornos con otros proyectos activos. NO neutraliza postgres (el flujo `dotnet run` lo necesita en `localhost:5438`) |
+| `infra/postgres/init-databases.sql` | Crea las 6 bases lógicas dentro de la única instancia `cc-postgres` en la primera inicialización |
 
 ---
 
@@ -263,7 +264,7 @@ GET http://localhost:8080/api/analytics/health
 
 **Gotcha 11 — `USERNAME` es env var reservada en macOS**: Al hacer smoke tests con `USERNAME="x"` en shell el valor queda como el del usuario del sistema (`jotade`). Usar otro nombre de variable (`U`, `USER_NAME`).
 
-**Gotcha 12 — EF CLI no se conecta a Postgres con SCRAM-SHA-256 desde host**: `dotnet ef database update` falla autenticando contra `cc-identity-db` aún con credenciales correctas. Workaround usado por el sub-agent: aplicar migración manualmente via `docker exec cc-identity-db psql ... -f migration.sql`.
+**Gotcha 12 — EF CLI no se conecta a Postgres con SCRAM-SHA-256 desde host**: `dotnet ef database update` falla autenticando contra Postgres aún con credenciales correctas. Workaround usado por el sub-agent: aplicar migración manualmente via `docker exec cc-postgres psql -U campus -d identity_db -f migration.sql` (desde Fase 13 el contenedor es `cc-postgres`, antes `cc-identity-db`).
 
 **Gotcha 13 — `xunit.runner.visualstudio` requerido junto a `xunit.v3`**: Sin él, `dotnet test` no descubre los tests por VSTest. Versión usada: 3.1.4.
 
@@ -901,3 +902,28 @@ Con Payments y Attendance corriendo a la vez contra el mismo RabbitMQ, la cola `
 - `tests/Attendance.Tests/Unit/EndpointNamingTests.cs`, `tests/Payments.Tests/Unit/EndpointNamingTests.cs` (nuevos)
 
 > Trail SDD en engram: plan #242, verify-report #243. Commiteado directamente en `main`.
+
+---
+
+## Fase 13 — consolidación de bases de datos (una sola instancia Postgres)
+
+**Cambio**: `db-consolidation`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-20
+
+### Motivación
+El usuario pidió que todas las DBs corran en **un único puerto/instancia** (`localhost:5438`) en vez de seis contenedores Postgres separados (5433-5438). Era el "plan B" ya documentado en `docs/03-infraestructura-esqueleto.md`.
+
+### Cambios
+- `docker-compose.yml`: 6 servicios `*-db` → 1 servicio `postgres` (contenedor `cc-postgres`, puerto host `5438`, hostname `postgres`). Monta `infra/postgres/init-databases.sql` en `/docker-entrypoint-initdb.d`. Las 6 connection strings de los microservicios pasan a `Host=postgres;Port=5432;Database=<db>`; `depends_on` apuntan a `postgres`. Volúmenes 6 → 1 (`postgres-data`).
+- `infra/postgres/init-databases.sql` (nuevo): `CREATE DATABASE` de las 6 bases.
+- `docker-compose.local.yml`: ya no neutraliza la DB (referenciaba `identity-db`, eliminado); solo rabbitmq. Postgres queda expuesto para el flujo `dotnet run`.
+- `appsettings.json` (Identity/Academic/Payments/Attendance): connection strings locales → `localhost:5438`.
+- 4 `DesignTimeDbContextFactory`: estandarizados a `localhost:5438` + `campus/campus` (antes inconsistentes 5432/5438, postgres/campus).
+- `EndpointNamingTests` (×2): puerto 5438 (cosmético, no conectan).
+- Docs: `DEPLOYMENT.md`, `03-infraestructura-esqueleto.md`, `PROGRESS.md`.
+
+### Notas
+- Las bases siguen siendo "base por servicio" a nivel lógico (sin tablas compartidas). Cada servicio aplica sus migraciones EF al arrancar (`MigrateDatabase<TContext>`).
+- `docker compose config` valida OK. Tests no afectados (Testcontainers usa puertos dinámicos).
+- Reset limpio: `docker compose down -v` borra `postgres-data` y el init script recrea las 6 bases.

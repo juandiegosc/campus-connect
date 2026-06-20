@@ -1,13 +1,14 @@
-# docker-compose.local.yml — Override para entornos donde los puertos 5433 y 5672/15672
-# ya están ocupados por otros proyectos (ej. wax-postgres, wax-rabbitmq).
+# docker-compose.local.yml — Override para entornos donde el puerto de RabbitMQ
+# (5672/15672) ya está ocupado por otro proyecto (ej. wax-rabbitmq).
 # Uso: docker compose -f docker-compose.yml -f docker-compose.local.yml [comando]
 #
 # Los contenedores siguen funcionando en la red Docker interna (campusnet).
 # Sólo se eliminan los port mappings hacia el host que causarían conflicto.
+#
+# NOTA: postgres NO se neutraliza aquí — el flujo `dotnet run` necesita alcanzarlo
+# en localhost:5438. Si tuvieras un conflicto en 5438, cambia el mapping en
+# docker-compose.yml en lugar de vaciarlo aquí.
 
 services:
   rabbitmq:
-    ports: []
-
-  identity-db:
     ports: []

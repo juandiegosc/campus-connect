@@ -7,18 +7,11 @@ Describe el docker-compose, la estructura de carpetas y cómo arrancar el entorn
 | Contenedor | Imagen | Puerto host | Rol |
 |---|---|---|---|
 | cc-rabbitmq | rabbitmq:3.13-management | 5672 / 15672 | Bus de mensajería + panel |
-| cc-identity-db | postgres:16 | 5433 | Base de Identity |
-| cc-academic-db | postgres:16 | 5434 | Base de Académico |
-| cc-payments-db | postgres:16 | 5435 | Base de Pagos |
-| cc-attendance-db | postgres:16 | 5436 | Base de Asistencia |
-| cc-notifications-db | postgres:16 | 5437 | Base de Notificaciones |
-| cc-analytics-db | postgres:16 | 5438 | Base de Analítica |
+| cc-postgres | postgres:16 | 5438 | **Una sola** instancia con TODAS las bases |
 | cc-identity-service ... cc-analytics-service | build .NET | interno 8080 | Microservicios |
 | cc-gateway | build .NET (Ocelot) | 8080 | Entrada única |
 
-Cada base expone un puerto host distinto (5433-5438) para poder inspeccionarlas con un cliente SQL sin colisiones. Internamente todas escuchan en 5432.
-
-Nota sobre recursos: seis instancias Postgres es lo más aislado y lo que elegiste, pero consume memoria. Si la máquina de demo sufre, una alternativa defendible es un único contenedor Postgres con seis bases lógicas separadas (una connection string por servicio, sin tablas compartidas); sigue siendo base por servicio a nivel lógico. Queda como plan B documentado.
+Una única instancia Postgres (`cc-postgres`) en `localhost:5438` aloja las seis bases lógicas — `identity_db`, `academic_db`, `payments_db`, `attendance_db`, `notifications_db`, `analytics_db` — creadas en la primera inicialización por `infra/postgres/init-databases.sql`. Sigue siendo base por servicio a nivel lógico (una connection string por servicio, sin tablas compartidas), pero consume mucha menos memoria que seis contenedores y se inspecciona desde un único `localhost:5438`.
 
 ## 2. Estructura de la solución
 
@@ -55,7 +48,7 @@ Las carpetas de capas están creadas con .gitkeep. Los proyectos .NET se generan
 
 El compose usa profiles para separar infraestructura de aplicación:
 
-- Sin profile: solo arrancan rabbitmq y las seis bases. Útil ahora, antes de tener código.
+- Sin profile: solo arrancan rabbitmq y la base `cc-postgres` (con sus seis bases lógicas). Útil ahora, antes de tener código.
 - Profile services: arranca además los microservicios y el gateway (requieren Dockerfile).
 
 Arrancar solo infraestructura:
@@ -73,7 +66,7 @@ docker compose --profile services up -d --build
 1. Copiar el entorno: `cp .env.example .env` y ajustar JWT_SIGNING_KEY.
 2. Levantar infraestructura: `docker compose up -d`.
 3. Verificar RabbitMQ en http://localhost:15672 (guest/guest por defecto).
-4. Verificar una base: `docker exec -it cc-academic-db psql -U campus -d academic_db -c "\l"`.
+4. Verificar las bases: `docker exec -it cc-postgres psql -U campus -d academic_db -c "\l"` (lista las 6 bases lógicas).
 5. Generar los proyectos .NET y sus Dockerfile (siguiente paso), luego `docker compose --profile services up -d --build`.
 
 ## 5. Dependencias de arranque

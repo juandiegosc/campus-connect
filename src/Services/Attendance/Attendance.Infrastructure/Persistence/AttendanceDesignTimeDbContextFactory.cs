@@ -7,7 +7,7 @@ namespace Attendance.Infrastructure.Persistence;
 /// Design-time factory for EF Core migrations.
 /// Hardcoded localhost connection — avoids running the host during dotnet ef migrations add.
 /// Gotcha 12: if dotnet ef database update fails via SCRAM from host,
-/// apply inside container: docker exec -i cc-attendance-db psql -U campus -d attendance_db &lt; migration.sql
+/// apply inside container: docker exec -i cc-postgres psql -U campus -d attendance_db &lt; migration.sql
 /// </summary>
 public sealed class AttendanceDesignTimeDbContextFactory : IDesignTimeDbContextFactory<AttendanceDbContext>
 {

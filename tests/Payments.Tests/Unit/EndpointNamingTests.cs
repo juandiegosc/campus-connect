@@ -21,7 +21,7 @@ public sealed class EndpointNamingTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:PaymentsDb"] =
-                    "Host=localhost;Port=5435;Database=payments_db;Username=campus;Password=campus"
+                    "Host=localhost;Port=5438;Database=payments_db;Username=campus;Password=campus"
             })
             .Build();
 

@@ -46,10 +46,10 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml --profile servi
 ```
 
 - `--profile services` → incluye Gateway + los 6 microservicios (sin esto, solo infra).
-- `-f docker-compose.local.yml` → quita los port mappings de RabbitMQ e identity-db hacia el host (evita conflictos si ya tienes otros Postgres/RabbitMQ corriendo). Ver [Conflictos de puertos](#conflictos-de-puertos).
+- `-f docker-compose.local.yml` → quita el port mapping de RabbitMQ hacia el host (evita conflictos si ya tienes otro RabbitMQ corriendo). Ver [Conflictos de puertos](#conflictos-de-puertos).
 - `--build` → reconstruye las imágenes (úsalo siempre tras cambios de código).
 
-Espera ~15-20 s a que arranquen las DB (tienen healthcheck) y los servicios.
+Espera ~15-20 s a que arranque la base de datos (tiene healthcheck) y los servicios.
 
 ---
 
@@ -80,10 +80,10 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml --profile servi
 `POST /api/identity/users` requiere un JWT con rol **Direccion**, pero al inicio no existe ningún usuario (problema del huevo y la gallina). Hay que sembrar el primer usuario Direccion directamente en la base.
 
 1. Genera un hash BCrypt de tu contraseña (cualquier herramienta BCrypt, cost 12).
-2. Insértalo en `identity-db`:
+2. Insértalo en la base `identity_db` (dentro de la instancia única `cc-postgres`):
 
 ```bash
-docker exec -i cc-identity-db psql -U campus -d identity_db <<'SQL'
+docker exec -i cc-postgres psql -U campus -d identity_db <<'SQL'
 INSERT INTO users (id, username, full_name, password_hash, role, is_active, created_at)
 VALUES (gen_random_uuid(), 'director1', 'Director Principal', '<BCRYPT_HASH>', 'Direccion', true, NOW())
 ON CONFLICT (username) DO NOTHING;
@@ -145,15 +145,17 @@ dotnet run --project src/Gateway/CampusConnect.Gateway
 
 ### Puertos locales (de `launchSettings.json`)
 
-| Componente | Puerto local | DB (Docker) |
+Todas las bases viven en **una sola** instancia Postgres expuesta en `localhost:5438` (contenedor `cc-postgres`); cada servicio usa su propia base dentro de ella.
+
+| Componente | Puerto local | Base de datos (en `localhost:5438`) |
 |---|---|---|
 | **Gateway** | `5287` | — |
-| Identity | `5245` | `localhost:5433` |
-| Academic | `5157` | `localhost:5434` |
-| Payments | `5235` | `localhost:5435` |
-| Attendance | `5188` | `localhost:5436` |
-| Notifications | `5185` | — |
-| Analytics | `5247` | — |
+| Identity | `5245` | `identity_db` |
+| Academic | `5157` | `academic_db` |
+| Payments | `5235` | `payments_db` |
+| Attendance | `5188` | `attendance_db` |
+| Notifications | `5185` | — (stub) |
+| Analytics | `5247` | — (stub) |
 
 > En local **el Gateway escucha en `5287`** (no en 8080). El puerto 8080 solo se usa dentro de Docker.
 
@@ -206,7 +208,9 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml --profile servi
 Causa #1: olvidaste `--profile services`. El Gateway está gateado por ese perfil. Usa el comando completo del Paso 2.
 
 ### Conflictos de puertos
-Si ves errores tipo `port is already allocated` para 5672/15672 (RabbitMQ) o 5433 (Postgres), es porque ya tienes otro stack usando esos puertos. La solución ya está incluida: el archivo `docker-compose.local.yml` elimina esos mappings al host (los contenedores siguen comunicándose por la red interna `campusnet`). Asegúrate de incluir `-f docker-compose.local.yml` en TODOS los comandos.
+Si ves errores tipo `port is already allocated` para 5672/15672 (RabbitMQ), es porque ya tienes otro stack usando esos puertos. El archivo `docker-compose.local.yml` elimina el mapping al host de RabbitMQ (los contenedores siguen comunicándose por la red interna `campusnet`). Inclúyelo con `-f docker-compose.local.yml` cuando lo necesites.
+
+> La base de datos vive ahora en **una sola** instancia Postgres (`cc-postgres`) expuesta en `localhost:5438`. El flujo `dotnet run` la necesita alcanzable en ese puerto, por eso el override NO la neutraliza. Si tuvieras un conflicto en 5438, cambia el mapping en `docker-compose.yml` (`ports: ["5438:5432"]`).
 
 Si el puerto **8080** está ocupado, libéralo o cambia el mapping del Gateway en `docker-compose.yml` (`ports: ["8080:8080"]`).
 
@@ -243,11 +247,14 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml --profile servi
         ▼              ▼          ▼          ▼              ▼              ▼
    identity        academic    payments   attendance   notifications   analytics
       │               │           │           │            (stub)         (stub)
-   identity-db     academic-db  payments-db attendance-db  notif-db      analytics-db
+      └───────────────┴───────────┴───────────┴───────────────┘
+                              ▼
+        cc-postgres  (localhost:5438) — una instancia, una base por servicio:
+        identity_db · academic_db · payments_db · attendance_db · notifications_db · analytics_db
                          │           │           │
                          └─────── RabbitMQ (event bus) ───────┘
 ```
 
-- Cada servicio tiene su **propia base de datos** (ningún servicio accede a la DB de otro).
+- Cada servicio tiene su **propia base de datos lógica** (ningún servicio accede a la base de otro), todas alojadas en una sola instancia Postgres `cc-postgres`.
 - La comunicación asíncrona entre servicios es por **RabbitMQ** (eventos de integración con patrón outbox).
 - El **Gateway (Ocelot)** es el único punto de entrada; enruta `/api/{servicio}/{...}` al contenedor correspondiente y valida el JWT en las rutas de negocio (las rutas `/health` quedan abiertas).

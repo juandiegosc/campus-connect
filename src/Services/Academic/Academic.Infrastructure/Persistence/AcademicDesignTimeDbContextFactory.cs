@@ -13,7 +13,7 @@ public sealed class AcademicDesignTimeDbContextFactory : IDesignTimeDbContextFac
     public AcademicDbContext CreateDbContext(string[] args)
     {
         var opts = new DbContextOptionsBuilder<AcademicDbContext>()
-            .UseNpgsql("Host=localhost;Port=5432;Database=academic_db;Username=postgres;Password=postgres")
+            .UseNpgsql("Host=localhost;Port=5438;Database=academic_db;Username=campus;Password=campus")
             .Options;
 
         // Pass null publisher — design-time factory does not need domain event dispatch

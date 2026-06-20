@@ -6,7 +6,7 @@ Documento de trabajo. Define la arquitectura del backend antes de escribir códi
 
 | Decisión | Elección | Motivo |
 |---|---|---|
-| Topología de datos | Base de datos por microservicio | Aislamiento real; cumple el requisito de separación; la consistencia entre servicios se logra por eventos |
+| Topología de datos | Una base de datos por microservicio (lógica) | Cumple el requisito de separación: cada servicio tiene su propia base, sin tablas compartidas; la consistencia entre servicios se logra por eventos. Nota: desde Fase 13 las bases viven en UNA sola instancia Postgres (`cc-postgres`, `localhost:5438`) por eficiencia de recursos — la separación sigue siendo lógica, no física |
 | API Gateway | Ocelot | Gateway .NET, configuración por JSON, validación JWT en el borde |
 | Autenticación | Servicio Identity dedicado | Emisor central de JWT; el resto valida el token |
 | Mensajería | RabbitMQ + MassTransit | Requisito obligatorio; MassTransit cubre pub/sub, point-to-point, retry, DLQ, outbox/inbox |
