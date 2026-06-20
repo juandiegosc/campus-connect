@@ -115,8 +115,9 @@ try
 
     var app = builder.Build();
 
-    // Aplica migraciones EF al arrancar (no-op en build-time OpenAPI y en tests).
-    app.MigrateDatabase<IdentityDbContext>();
+    // Aplica migraciones EF y siembra datos iniciales al arrancar (no-op en build-time OpenAPI y en tests).
+    app.MigrateDatabase<IdentityDbContext>()
+       .SeedDatabase(IdentityDbInitializer.Seed);
 
     // Correlation ID middleware — propagates X-Correlation-Id through the request chain
     app.UseCampusConnectCorrelation();

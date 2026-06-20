@@ -19,6 +19,10 @@ public static class MigrationExtensions
     ///   - the host environment is "Testing" (integration tests own their Testcontainers migration).
     /// Retries a few times so the service tolerates a database that is still starting up.
     /// </summary>
+    /// <typeparam name="TContext">The EF Core DbContext to migrate.</typeparam>
+    /// <param name="app">The <see cref="WebApplication"/> instance.</param>
+    /// <param name="retries">Maximum number of retry attempts while waiting for the database to become available.</param>
+    /// <returns>The same <see cref="WebApplication"/> for chaining.</returns>
     public static WebApplication MigrateDatabase<TContext>(this WebApplication app, int retries = 10)
         where TContext : DbContext
     {
@@ -46,5 +50,25 @@ public static class MigrationExtensions
                 Thread.Sleep(TimeSpan.FromSeconds(2));
             }
         }
+    }
+
+    /// <summary>
+    /// Runs a seed action after migrations. No-op in the same environments as <see cref="MigrateDatabase{TContext}"/>:
+    /// build-time OpenAPI generation and the "Testing" environment (integration tests seed their own data).
+    /// </summary>
+    /// <param name="app">The <see cref="WebApplication"/> instance.</param>
+    /// <param name="seeder">An action that receives the scoped <see cref="IServiceProvider"/> and performs data seeding.</param>
+    /// <returns>The same <see cref="WebApplication"/> for chaining.</returns>
+    public static WebApplication SeedDatabase(this WebApplication app, Action<IServiceProvider> seeder)
+    {
+        if (Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider")
+            return app;
+
+        if (app.Environment.IsEnvironment("Testing"))
+            return app;
+
+        using var scope = app.Services.CreateScope();
+        seeder(scope.ServiceProvider);
+        return app;
     }
 }
