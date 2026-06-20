@@ -927,3 +927,120 @@ El usuario pidió que todas las DBs corran en **un único puerto/instancia** (`l
 - Las bases siguen siendo "base por servicio" a nivel lógico (sin tablas compartidas). Cada servicio aplica sus migraciones EF al arrancar (`MigrateDatabase<TContext>`).
 - `docker compose config` valida OK. Tests no afectados (Testcontainers usa puertos dinámicos).
 - Reset limpio: `docker compose down -v` borra `postgres-data` y el init script recrea las 6 bases.
+
+---
+
+## Fase 14 — db-seeder (IdentityDbInitializer + SeedDatabase extension)
+
+**Cambio**: `db-seeder`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-20
+
+### Motivación
+`POST /api/identity/users` requiere JWT con rol `Direccion` (BREAKING CHANGE Phase 3). Sin datos iniciales no hay forma de hacer login la primera vez — problema del huevo y la gallina. La solución anterior era insertar el primer usuario manualmente vía `docker exec cc-postgres psql ...`; ahora el seeder lo hace automáticamente en cada `dotnet run` y en cada arranque Docker.
+
+### Cambios
+
+**`BuildingBlocks.Infrastructure/Persistence/MigrationExtensions.cs`** — nuevo método `SeedDatabase`:
+```csharp
+public static WebApplication SeedDatabase(this WebApplication app, Action<IServiceProvider> seeder)
+```
+- Mismos guards que `MigrateDatabase`: no-op en `GetDocument.Insider` (build-time OpenAPI) y en env `"Testing"` (los tests seedean sus propios datos vía Testcontainers).
+- Encadenable: `app.MigrateDatabase<TContext>().SeedDatabase(MyInitializer.Seed)`.
+
+**`Identity.Infrastructure/Persistence/IdentityDbInitializer.cs`** (nuevo):
+- **Idempotente**: si `db.Users.Any()` → return inmediato. Nunca duplica.
+- Siembra 4 usuarios al primer arranque (uno por rol), contraseña `Admin1234!`:
+
+| Username | Rol | Contraseña |
+|---|---|---|
+| `director1` | Direccion | `Admin1234!` |
+| `secretaria1` | Secretaria | `Admin1234!` |
+| `finanzas1` | Finanzas | `Admin1234!` |
+| `docente1` | Docente | `Admin1234!` |
+
+- Usa dominio correcto: `User.Create()` + `PasswordHash.Create()` + `IPasswordHasher` (BCrypt cost 12).
+
+**`Identity.API/Program.cs`**:
+```csharp
+app.MigrateDatabase<IdentityDbContext>()
+   .SeedDatabase(IdentityDbInitializer.Seed);
+```
+
+### Por qué solo Identity
+Academic, Payments y Attendance no tienen datos de arranque — sus entidades se crean por API o por eventos de integración. No tiene sentido seedear estudiantes ni pagos ficticios.
+
+### Flujo tras el seeder
+```bash
+dotnet run --project src/Services/Identity/Identity.API
+# → migraciones EF aplicadas automáticamente
+# → 4 usuarios creados (si la tabla estaba vacía)
+
+curl -X POST http://localhost:5245/api/identity/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"director1","password":"Admin1234!"}'
+# → { accessToken, refreshToken, ... }
+```
+
+---
+
+## Estado del sistema — 2026-06-20 (punto de parada para la próxima sesión)
+
+### Completitud: 4 de 6 bounded contexts con dominio
+
+| Servicio | Estado | Fases completadas |
+|---|---|---|
+| Identity | ✅ COMPLETO | Phase 2 (domain+infra) + Phase 3 (JWT/login/refresh/me) + Seeder |
+| Academic | ✅ COMPLETO | Phase 1 (enroll) + Phase 2 (PaymentConfirmed) + Phase 3 (MarkOverdue) + Phase 4 (Suspend/Reactivate/Graduate) |
+| Payments | ✅ COMPLETO | Phase 1 (obligations+confirm) + Phase 2 (StudentReplica) + Phase 3 (StudentStatusUpdated) |
+| Attendance | ✅ COMPLETO | Phase 1 (RecordAttendance + ReportIncident + StudentEnrolledConsumer) |
+| **Notifications** | ❌ STUB | Solo /health — cero dominio |
+| **Analytics** | ❌ STUB | Solo /health — cero dominio |
+
+### Patrones de la consigna cubiertos vs pendientes
+
+| Patrón (consigna §10) | Estado |
+|---|---|
+| API Gateway (Ocelot) | ✅ |
+| Publish/Subscribe | ✅ (StudentEnrolled, PaymentConfirmed, AttendanceRecorded, IncidentReported, StudentStatusUpdated) |
+| **Point-to-Point** (`SendNotificationCommand`) | ❌ requiere Notifications |
+| Message Translator | ✅ (StudentReplica en Payments y Attendance) |
+| Idempotent Receiver | ✅ (InboxState en Payments) |
+| Dead Letter Channel | ✅ (MassTransit crea `_error` automáticamente) |
+| Event Message | ✅ |
+| Health Check API | ✅ |
+| Logs / trazabilidad | ✅ (Serilog + CorrelationId) |
+| **Vista analítica / CQRS read model** | ❌ requiere Analytics |
+
+### Próximos dos cambios SDD (en orden recomendado)
+
+#### 1. `notifications-service-phase1` — PRIORITARIO
+Según `docs/02-contratos-api-eventos.md`:
+- Consumir: `StudentEnrolled`, `PaymentConfirmed`, `IncidentReported`, `AttendanceRecorded` (Pub/Sub) + `SendNotificationCommand` (Point-to-Point, el único comando del sistema)
+- Publicar: `NotificationSent`, `NotificationFailed`
+- Endpoint: `GET /api/notifications/students/{id}` → historial de notificaciones (roles: Direccion/Secretaria)
+- Simula envío (no hay SMTP real); la simulación puede ser un log + entidad `Notification` en la DB.
+- Cubre el patrón **Point-to-Point** (único en el sistema — importante para la defensa).
+
+#### 2. `analytics-service-phase1` — CIERRA EL PROYECTO
+- Consumir: TODOS los eventos (7 tipos: StudentEnrolled, StudentStatusUpdated, PaymentConfirmed, AttendanceRecorded, IncidentReported, NotificationSent, NotificationFailed)
+- Publicar: nada
+- Endpoint: `GET /api/analytics/summary` → dashboard directivo (totalEnrolledStudents, confirmedPayments, attendanceRate, incidents, etc.)
+- Es el modelo de lectura consolidado exigido por la consigna (CQRS a nivel de sistema).
+- Cubre el patrón **Vista analítica**.
+
+### Infraestructura operativa
+- `cc-postgres` en `localhost:5438` con 6 bases lógicas — ✅ operativo
+- `cc-rabbitmq` en `localhost:5672` / panel en `localhost:15672` — ✅ operativo
+- Flujo `dotnet run`: infra en Docker (sin `--profile services`) + servicios/Gateway con `dotnet run` — ✅ funcional
+- Colas RabbitMQ con prefijo por servicio (ADR-076): `academic-*`, `payments-*`, `attendance-*` — ✅
+- Seeder Identity: `director1/Admin1234!` (Direccion), `secretaria1`, `finanzas1`, `docente1` — ✅
+
+### Comandos para continuar
+```bash
+# Arrancar infra (si no está corriendo)
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+
+# Iniciar siguiente fase SDD
+/sdd-new notifications-service-phase1
+```
