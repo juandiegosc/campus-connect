@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Attendance.Application;
 using Attendance.Infrastructure;
+using Attendance.Infrastructure.Persistence;
+using BuildingBlocks.Infrastructure.Persistence;
 using Attendance.API.Endpoints;
 using BuildingBlocks.Infrastructure;
 using BuildingBlocks.Infrastructure.OpenApi;
@@ -22,7 +24,9 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.WebHost.UseUrls("http://0.0.0.0:8080");
+    // En Docker cada contenedor usa 8080; en local se respeta el puerto de launchSettings.
+    if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+        builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
     builder.Host.UseSerilog((ctx, cfg) =>
     {
@@ -93,6 +97,9 @@ try
             "Autenticación JWT Bearer (roles: Docente, Direccion).");
 
     var app = builder.Build();
+
+    // Aplica migraciones EF al arrancar (no-op en build-time OpenAPI y en tests).
+    app.MigrateDatabase<AttendanceDbContext>();
 
     app.MapOpenApi();
 

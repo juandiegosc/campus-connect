@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Academic.Application;
 using Academic.Infrastructure;
+using Academic.Infrastructure.Persistence;
+using BuildingBlocks.Infrastructure.Persistence;
 using Academic.API.Endpoints;
 using BuildingBlocks.Infrastructure;
 using BuildingBlocks.Infrastructure.Correlation;
@@ -23,7 +25,9 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.WebHost.UseUrls("http://0.0.0.0:8080");
+    // En Docker cada contenedor usa 8080; en local se respeta el puerto de launchSettings.
+    if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+        builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
     builder.Host.UseSerilog((ctx, cfg) =>
     {
@@ -95,6 +99,9 @@ try
             "Autenticación JWT Bearer (roles: Secretaria, Direccion, Docente).");
 
     var app = builder.Build();
+
+    // Aplica migraciones EF al arrancar (no-op en build-time OpenAPI y en tests).
+    app.MigrateDatabase<AcademicDbContext>();
 
     app.MapOpenApi();
 

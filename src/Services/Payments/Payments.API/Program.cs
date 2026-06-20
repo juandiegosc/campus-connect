@@ -2,8 +2,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using BuildingBlocks.Infrastructure;
 using BuildingBlocks.Infrastructure.OpenApi;
+using BuildingBlocks.Infrastructure.Persistence;
 using Payments.Application;
 using Payments.Infrastructure;
+using Payments.Infrastructure.Persistence;
 using Payments.API.Endpoints;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -22,7 +24,9 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.WebHost.UseUrls("http://0.0.0.0:8080");
+    // En Docker cada contenedor usa 8080; en local se respeta el puerto de launchSettings.
+    if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+        builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
     builder.Host.UseSerilog((ctx, cfg) =>
     {
@@ -92,6 +96,9 @@ try
             "Autenticación JWT Bearer requerida. Rol: **Finanzas**.");
 
     var app = builder.Build();
+
+    // Aplica migraciones EF al arrancar (no-op en build-time OpenAPI y en tests).
+    app.MigrateDatabase<PaymentsDbContext>();
 
     app.MapOpenApi();
 

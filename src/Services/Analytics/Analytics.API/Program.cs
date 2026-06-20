@@ -10,7 +10,9 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.WebHost.UseUrls("http://0.0.0.0:8080");
+    // En Docker cada contenedor usa 8080; en local se respeta el puerto de launchSettings.
+    if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+        builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
     builder.Host.UseSerilog((ctx, cfg) =>
     {

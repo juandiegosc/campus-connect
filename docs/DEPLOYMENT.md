@@ -118,6 +118,69 @@ El modo "solo infra" es útil cuando depuras un servicio desde Visual Studio / R
 
 ---
 
+## Modo recomendado para desarrollo: infra en Docker + servicios con `dotnet run`
+
+Este es el flujo para iterar rápido: solo las dependencias (Postgres + RabbitMQ) corren en Docker, y los microservicios + Gateway se levantan con `dotnet run` (o desde Rider/VS) en la máquina anfitriona.
+
+### 1. Levantar solo la infraestructura
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# (sin --profile services → solo DBs + RabbitMQ)
+```
+
+### 2. Levantar cada servicio en su propia terminal
+
+```bash
+dotnet run --project src/Services/Identity/Identity.API
+dotnet run --project src/Services/Academic/Academic.API
+dotnet run --project src/Services/Payments/Payments.API
+dotnet run --project src/Services/Attendance/Attendance.API
+dotnet run --project src/Services/Notifications/Notifications.API
+dotnet run --project src/Services/Analytics/Analytics.API
+dotnet run --project src/Gateway/CampusConnect.Gateway
+```
+
+> Desde Rider puedes crear un *compound run configuration* que arranque los 7 a la vez.
+
+### Puertos locales (de `launchSettings.json`)
+
+| Componente | Puerto local | DB (Docker) |
+|---|---|---|
+| **Gateway** | `5287` | — |
+| Identity | `5245` | `localhost:5433` |
+| Academic | `5157` | `localhost:5434` |
+| Payments | `5235` | `localhost:5435` |
+| Attendance | `5188` | `localhost:5436` |
+| Notifications | `5185` | — |
+| Analytics | `5247` | — |
+
+> En local **el Gateway escucha en `5287`** (no en 8080). El puerto 8080 solo se usa dentro de Docker.
+
+### Cómo funciona el ruteo (importante)
+
+El Gateway carga un archivo de Ocelot distinto según dónde corre, detectado con la variable `DOTNET_RUNNING_IN_CONTAINER`:
+
+- **En Docker** (`DOTNET_RUNNING_IN_CONTAINER=true`) → `ocelot.json` → enruta a los hostnames de la red interna (`identity-service:8080`, …).
+- **En local** (variable ausente) → `ocelot.Local.json` → enruta a `localhost:<puerto launchSettings>`.
+
+La misma variable controla el binding del puerto: en Docker se fuerza `0.0.0.0:8080`; en local se respeta el puerto de `launchSettings`. Esto aplica a los 6 servicios **y** al Gateway.
+
+### Migraciones EF
+
+Identity, Academic, Payments y Attendance aplican sus migraciones EF **automáticamente al arrancar** (`MigrateDatabase<TContext>()`), con reintentos mientras la DB termina de inicializar. No hay que correr `dotnet ef database update` a mano: basta con que la infraestructura Docker esté arriba antes de hacer `dotnet run`.
+
+### Verificar
+
+```bash
+# Salud directa de un servicio (puerto local)
+curl http://localhost:5245/health           # Identity
+# Salud a través del Gateway local
+curl http://localhost:5287/api/identity/health
+```
+
+---
+
 ## Comandos útiles
 
 ```bash
@@ -146,6 +209,16 @@ Causa #1: olvidaste `--profile services`. El Gateway está gateado por ese perfi
 Si ves errores tipo `port is already allocated` para 5672/15672 (RabbitMQ) o 5433 (Postgres), es porque ya tienes otro stack usando esos puertos. La solución ya está incluida: el archivo `docker-compose.local.yml` elimina esos mappings al host (los contenedores siguen comunicándose por la red interna `campusnet`). Asegúrate de incluir `-f docker-compose.local.yml` en TODOS los comandos.
 
 Si el puerto **8080** está ocupado, libéralo o cambia el mapping del Gateway en `docker-compose.yml` (`ports: ["8080:8080"]`).
+
+### `Failed to bind to address http://0.0.0.0:8080: address already in use` al hacer `dotnet run`
+En modo local el Gateway y los servicios **no** usan 8080 (usan su puerto de `launchSettings`). Si ves este error es porque hay un proceso viejo levantado con el código anterior (cuando el binding a 8080 no era condicional). Localiza y mata el proceso:
+
+```bash
+lsof -nP -iTCP:8080 -sTCP:LISTEN   # muestra el PID
+kill <PID>
+```
+
+Luego vuelve a `dotnet run` con el código actual.
 
 ### Cambié código y no se refleja
 Las imágenes se cachean. Reconstruye con `--build` (o `up -d --build <servicio>` para uno solo).

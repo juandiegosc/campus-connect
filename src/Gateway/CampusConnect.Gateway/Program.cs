@@ -15,7 +15,10 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.WebHost.UseUrls("http://0.0.0.0:8080");
+    // En Docker el contenedor escucha en 8080; en local se respeta el puerto de launchSettings.
+    var inContainer = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+    if (inContainer)
+        builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
     builder.Host.UseSerilog((ctx, cfg) =>
     {
@@ -64,8 +67,10 @@ try
 
     builder.Services.AddAuthorization();
 
-    // Ocelot reads routes from ocelot.json
-    builder.Configuration.AddJsonFile("ocelot.json", optional: false, reloadOnChange: false);
+    // Ocelot routes: en Docker se enruta a los hostnames de la red (identity-service:8080, ...);
+    // en local los servicios corren con `dotnet run` y se enrutan a localhost:<puerto launchSettings>.
+    var ocelotFile = inContainer ? "ocelot.json" : "ocelot.Local.json";
+    builder.Configuration.AddJsonFile(ocelotFile, optional: false, reloadOnChange: false);
     builder.Services.AddOcelot(builder.Configuration);
 
     var app = builder.Build();

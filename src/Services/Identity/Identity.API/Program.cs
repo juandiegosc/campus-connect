@@ -5,8 +5,10 @@ using BuildingBlocks.Infrastructure;
 using BuildingBlocks.Infrastructure.Correlation;
 using BuildingBlocks.Infrastructure.OpenApi;
 using Identity.API.Endpoints;
+using BuildingBlocks.Infrastructure.Persistence;
 using Identity.Application;
 using Identity.Infrastructure;
+using Identity.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -25,7 +27,9 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.WebHost.UseUrls("http://0.0.0.0:8080");
+    // En Docker cada contenedor usa 8080; en local se respeta el puerto de launchSettings.
+    if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+        builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
     builder.Host.UseSerilog((ctx, cfg) =>
     {
@@ -110,6 +114,9 @@ try
             tags: ["ready"]);
 
     var app = builder.Build();
+
+    // Aplica migraciones EF al arrancar (no-op en build-time OpenAPI y en tests).
+    app.MigrateDatabase<IdentityDbContext>();
 
     // Correlation ID middleware — propagates X-Correlation-Id through the request chain
     app.UseCampusConnectCorrelation();
