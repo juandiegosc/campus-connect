@@ -54,7 +54,7 @@ public static class DependencyInjection
         services.AddMassTransit(cfg =>
         {
             cfg.AddConsumer<PaymentConfirmedConsumer>();  // Phase 2 addition
-            cfg.AddCampusConnectMassTransit<AcademicDbContext>(configuration);
+            cfg.AddCampusConnectMassTransit<AcademicDbContext>(configuration, "academic");  // ADR-076: queue prefix
         });
 
         // Application port → MassTransit-backed publisher (keeps Application free of transport deps)

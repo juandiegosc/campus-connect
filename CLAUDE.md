@@ -4,12 +4,14 @@
 Plataforma de gestión escolar con arquitectura de microservicios (.NET 10, Clean Architecture, MediatR, MassTransit, Ocelot).
 
 ## CampusConnect 360 — SDD Progress
-- **Último cambio completado**: `attendance-service-phase1` — bounded context completo (greenfield): 2 agregados (AttendanceRecord + Incident) publicando AttendanceRecorded/IncidentReported vía outbox + StudentEnrolledConsumer + StudentReplica + 4 endpoints (Docente/DocenteOrDireccion) (56/56 tests verdes, verify passed-with-warnings 0 CRITICAL ✅).
+- **Último cambio completado**: `messaging-endpoint-isolation` (ADR-076) — fix de colisión de colas RabbitMQ: `AddCampusConnectMassTransit` ahora exige `serviceName` y prefija las colas (`KebabCaseEndpointNameFormatter`). Antes Payments y Attendance compartían la cola `StudentEnrolled` (competing consumers → réplicas incompletas); ahora cada servicio tiene su cola (`payments-student-enrolled`, `attendance-student-enrolled`). Verificado en vivo contra RabbitMQ. Tests: Attendance 57/57, Payments 102/102, Academic 104/106.
+- **Cambio previo**: `attendance-service-phase1` — bounded context completo (greenfield): 2 agregados publicando AttendanceRecorded/IncidentReported vía outbox + StudentEnrolledConsumer + StudentReplica + 4 endpoints (56/56 tests, 0 CRITICAL ✅).
+- **Flujo dev local (dotnet run)**: infra en Docker (sin `--profile services`) + micros/Gateway con `dotnet run`. `UseUrls(8080)` y la selección de Ocelot (`ocelot.json` vs `ocelot.Local.json`) son condicionales a `DOTNET_RUNNING_IN_CONTAINER`. Puertos locales: Gateway 5287, Identity 5245, Academic 5157, Payments 5235, Attendance 5188, Notifications 5185, Analytics 5247. Auto-migración EF al arrancar (`MigrateDatabase<TContext>`). Ver `docs/DEPLOYMENT.md`.
 - **Estado**: `backend-bootstrap` COMPLETO + `identity-service` COMPLETO + `academic-service` Phase 1-4 COMPLETO + `payments-service` Phase 1-3 COMPLETO + `attendance-service` Phase 1 COMPLETO. Pendientes: Notifications, Analytics (stubs sin dominio).
 - **Contratos congelados poblados (one-way door)**: AttendanceRecorded (RecordId, StudentId, Date, Status), IncidentReported (IncidentId, StudentId, Type, Severity) — antes vacíos, ahora LOCKED.
 - **Próximo cambio SDD**: consolidar Notifications o Analytics (stubs sin dominio aún)
 - **Workflow git**: trabajar SIEMPRE en `main` directamente (sin ramas feature) — directiva del usuario
-- **Última actualización**: 2026-06-19
+- **Última actualización**: 2026-06-20
 - **Contratos congelados (one-way door)**: StudentEnrolled (5 campos), StudentStatusUpdated (3 campos), PaymentConfirmed (5 campos) — NO modificar sin PR cross-cutting
 - **BREAKING CHANGE Phase 3 Identity**: `POST /api/identity/users` ahora requiere `role=Direccion` JWT
 - **JWT signing key convention**: `campus-connect-dev-placeholder-key-32b` (idéntico en Identity.API, Academic.API y Gateway — NUNCA cambiar uno sin el otro)

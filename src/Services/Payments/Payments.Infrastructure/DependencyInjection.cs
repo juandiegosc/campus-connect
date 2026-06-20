@@ -58,7 +58,7 @@ public static class DependencyInjection
             // Phase 3: StudentStatusUpdatedConsumer — also BEFORE topology wiring (ADR-042)
             cfg.AddConsumer<StudentStatusUpdatedConsumer>();
 
-            cfg.AddCampusConnectMassTransit<PaymentsDbContext>(configuration);
+            cfg.AddCampusConnectMassTransit<PaymentsDbContext>(configuration, "payments");  // ADR-076: queue prefix
         });
 
         return services;

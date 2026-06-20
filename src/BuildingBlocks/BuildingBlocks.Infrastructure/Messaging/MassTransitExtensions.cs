@@ -12,13 +12,31 @@ public static class MassTransitExtensions
     /// No consumers are registered here — each service wires its own consumers
     /// in its composition root.
     ///
-    /// Queue/exchange naming convention: kebab-case (e.g. "student-enrolled").
+    /// Queue naming convention: kebab-case PREFIXED by service name, e.g. for
+    /// <paramref name="serviceName"/> = "attendance" a StudentEnrolledConsumer
+    /// maps to queue "attendance-student-enrolled".
+    ///
+    /// CRITICAL (ADR-076): the per-service prefix prevents queue-name collisions
+    /// between services hosting a same-named consumer. Without it, Payments and
+    /// Attendance (both with StudentEnrolledConsumer) would share ONE queue named
+    /// "StudentEnrolled" and become competing consumers — each StudentEnrolled
+    /// event would reach only ONE service, leaving both student replicas incomplete.
     /// </summary>
+    /// <typeparam name="TContext">EF Core DbContext that backs the transactional outbox.</typeparam>
+    /// <param name="cfg">The MassTransit bus registration configurator.</param>
+    /// <param name="configuration">Application configuration (RabbitMQ host/user/pass keys).</param>
+    /// <param name="serviceName">Lowercase service identifier used as the queue prefix (e.g. "academic", "payments", "attendance").</param>
     public static void AddCampusConnectMassTransit<TContext>(
         this IBusRegistrationConfigurator cfg,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        string serviceName)
         where TContext : DbContext
     {
+        // ADR-076: prefix every receive endpoint (queue) with the service name so
+        // homonymous consumers in different services get distinct queues (real fan-out).
+        cfg.SetEndpointNameFormatter(
+            new KebabCaseEndpointNameFormatter(prefix: serviceName, includeNamespace: false));
+
         cfg.AddEntityFrameworkOutbox<TContext>(o =>
         {
             o.UsePostgres();

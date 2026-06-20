@@ -53,7 +53,7 @@ public static class DependencyInjection
             // StudentEnrolledConsumer — BEFORE topology wiring (ADR-042 R1)
             cfg.AddConsumer<StudentEnrolledConsumer>();
 
-            cfg.AddCampusConnectMassTransit<AttendanceDbContext>(configuration);
+            cfg.AddCampusConnectMassTransit<AttendanceDbContext>(configuration, "attendance");  // ADR-076: queue prefix
         });
 
         return services;

@@ -874,3 +874,30 @@ Los 6 servicios de negocio con dominio: Identity, Academic (P1-4), Payments (P1-
 
 ### Próximo cambio SDD
 Notifications o Analytics (greenfield).
+
+---
+
+## Fase 12 — messaging-endpoint-isolation (fix de colisión de colas RabbitMQ)
+
+**Cambio**: `messaging-endpoint-isolation`
+**Estado**: COMPLETO
+**Fecha**: 2026-06-20
+**Tests**: Attendance 57/57, Payments 102/102, Academic 104/106 (2 skips previos). 3 tests nuevos (Strict TDD RED→GREEN).
+**Verify**: PASSED — 0 CRITICAL. Verificación viva contra RabbitMQ real.
+**ADR**: ADR-076.
+
+### Problema (verificado en vivo)
+Con Payments y Attendance corriendo a la vez contra el mismo RabbitMQ, la cola `StudentEnrolled` aparecía con **2 consumers** sobre UNA sola cola. Ambos servicios tienen un `StudentEnrolledConsumer` y, con el `DefaultEndpointNameFormatter` (sin prefijo), colisionaban en el mismo nombre de cola → *competing consumers*: cada evento `StudentEnrolled` llegaba a UN solo servicio → ambas réplicas de estudiantes quedaban incompletas. Los tests no lo detectaban (harness in-memory por proceso, nunca los dos servicios contra el mismo broker real).
+
+### Decisión (ADR-076)
+`AddCampusConnectMassTransit<TContext>` recibe un nuevo parámetro `serviceName` y configura `cfg.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter(prefix: serviceName, includeNamespace: false))`. Cada servicio prefija sus colas: `academic`, `payments`, `attendance`.
+
+### Resultado (colas tras el fix)
+`academic-payment-confirmed`, `payments-student-enrolled`, `payments-student-status-updated`, `attendance-student-enrolled` — 4 colas distintas, 1 consumer cada una. `StudentEnrolled` ahora se enruta a `payments-student-enrolled` Y `attendance-student-enrolled` (fan-out real). Verificado vía API de management (:15672).
+
+### Archivos
+- `BuildingBlocks.Infrastructure/Messaging/MassTransitExtensions.cs` (param `serviceName` + formatter)
+- `Academic/Payments/Attendance .Infrastructure/DependencyInjection.cs` (pasan su prefijo)
+- `tests/Attendance.Tests/Unit/EndpointNamingTests.cs`, `tests/Payments.Tests/Unit/EndpointNamingTests.cs` (nuevos)
+
+> Trail SDD en engram: plan #242, verify-report #243. Commiteado directamente en `main`.
