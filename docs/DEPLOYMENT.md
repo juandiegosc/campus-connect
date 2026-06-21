@@ -39,66 +39,43 @@ cp .env.example .env
 
 ---
 
-## Paso 2 — Levantar todo el stack
+## Paso 2 — Elegir modo de ejecución
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services up -d --build
-```
-
-- `--profile services` → incluye Gateway + los 6 microservicios (sin esto, solo infra).
-- `-f docker-compose.local.yml` → quita el port mapping de RabbitMQ hacia el host (evita conflictos si ya tienes otro RabbitMQ corriendo). Ver [Conflictos de puertos](#conflictos-de-puertos).
-- `--build` → reconstruye las imágenes (úsalo siempre tras cambios de código).
-
-Espera ~15-20 s a que arranque la base de datos (tiene healthcheck) y los servicios.
+| Modo | Cuándo usarlo | Enlace |
+|---|---|---|
+| **A — Solo infra + `dotnet run`** ⭐ | Desarrollo activo, debugger, iteración rápida | [Ver Modo A](#modo-a--solo-infraestructura--dotnet-run-) |
+| **B — Stack completo en Docker** | Validar build final, demo, CI | [Ver Modo B](#modo-b--stack-completo-en-docker) |
 
 ---
 
-## Paso 3 — Verificar que todo responde
+## Paso 3 — Usuarios de arranque (sembrados automáticamente)
 
-```bash
-# Salud del Gateway (su propio endpoint, antes de Ocelot)
-curl http://localhost:8080/health
-# → {"status":"ok","service":"gateway"}
+Al primer arranque con una base vacía, Identity siembra **4 usuarios predeterminados** (uno por rol) de forma automática e idempotente — no se necesita SQL manual.
 
-# Salud de cada servicio ENRUTADO por el Gateway
-for s in identity academic payments attendance notifications analytics; do
-  printf "%s -> " "$s"; curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/$s/health
-done
-# → todos deben dar 200
-```
+| Usuario | Contraseña | Rol |
+|---|---|---|
+| `director1` | `Admin1234!` | Direccion |
+| `secretaria1` | `Admin1234!` | Secretaria |
+| `finanzas1` | `Admin1234!` | Finanzas |
+| `docente1` | `Admin1234!` | Docente |
 
-Estado de los contenedores:
+> El seed corre en `IdentityDbInitializer.Seed` — si la tabla `users` ya tiene filas, no hace nada.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services ps
-```
-
----
-
-## Paso 4 — Bootstrap del primer usuario (para endpoints protegidos)
-
-`POST /api/identity/users` requiere un JWT con rol **Direccion**, pero al inicio no existe ningún usuario (problema del huevo y la gallina). Hay que sembrar el primer usuario Direccion directamente en la base.
-
-1. Genera un hash BCrypt de tu contraseña (cualquier herramienta BCrypt, cost 12).
-2. Insértalo en la base `identity_db` (dentro de la instancia única `cc-postgres`):
-
-```bash
-docker exec -i cc-postgres psql -U campus -d identity_db <<'SQL'
-INSERT INTO users (id, username, full_name, password_hash, role, is_active, created_at)
-VALUES (gen_random_uuid(), 'director1', 'Director Principal', '<BCRYPT_HASH>', 'Direccion', true, NOW())
-ON CONFLICT (username) DO NOTHING;
-SQL
-```
-
-3. Haz login y usa el `accessToken` en las siguientes llamadas:
+Haz login con cualquiera de ellos y usa el `accessToken` en las siguientes llamadas:
 
 ```bash
 curl -X POST http://localhost:8080/api/identity/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"director1","password":"<TU_PASSWORD>"}'
+  -d '{"username":"director1","password":"Admin1234!"}'
 # → { accessToken, refreshToken, ... }
 
-# Llamada protegida:
+# Crear otro usuario (requiere rol Direccion):
+curl -X POST http://localhost:8080/api/identity/users \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{"username":"docente2","fullName":"Docente Dos","password":"Admin1234!","role":"Docente"}'
+
+# Llamada protegida de otro servicio:
 curl http://localhost:8080/api/academic/students \
   -H "Authorization: Bearer <accessToken>"
 ```
@@ -107,26 +84,25 @@ curl http://localhost:8080/api/academic/students \
 
 ---
 
-## Dos modos de ejecución
+## Modo A — Solo infraestructura + `dotnet run` ⭐ (recomendado)
 
-| Objetivo | Comando |
-|---|---|
-| **Todo el sistema** (Gateway + servicios + infra) | `docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services up -d --build` |
-| **Solo infraestructura** (DB + RabbitMQ) — para correr servicios desde el IDE | `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d` |
-
-El modo "solo infra" es útil cuando depuras un servicio desde Visual Studio / Rider apuntando a `localhost`.
-
----
-
-## Modo recomendado para desarrollo: infra en Docker + servicios con `dotnet run`
-
-Este es el flujo para iterar rápido: solo las dependencias (Postgres + RabbitMQ) corren en Docker, y los microservicios + Gateway se levantan con `dotnet run` (o desde Rider/VS) en la máquina anfitriona.
+Postgres y RabbitMQ corren en Docker; los microservicios y el Gateway se levantan con `dotnet run`. Es el flujo preferido para desarrollo: compilación incremental, hot-reload, y debugger nativo desde Rider/VS.
 
 ### 1. Levantar solo la infraestructura
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
-# (sin --profile services → solo DBs + RabbitMQ)
+docker compose -f docker-compose.yml up -d
+```
+
+> **Sin** `-f docker-compose.local.yml` y **sin** `--profile services`.  
+> Levanta únicamente `cc-postgres` (localhost:**5438**) y `cc-rabbitmq` (localhost:**5672**).  
+> El override `docker-compose.local.yml` elimina el port mapping de RabbitMQ — si lo incluyeras aquí, los servicios locales no podrían conectarse al broker.
+
+Espera a que ambos contenedores estén `healthy`:
+
+```bash
+docker compose -f docker-compose.yml ps
+# postgres → healthy | rabbitmq → healthy
 ```
 
 ### 2. Levantar cada servicio en su propia terminal
@@ -145,7 +121,7 @@ dotnet run --project src/Gateway/CampusConnect.Gateway
 
 ### Puertos locales (de `launchSettings.json`)
 
-Todas las bases viven en **una sola** instancia Postgres expuesta en `localhost:5438` (contenedor `cc-postgres`); cada servicio usa su propia base dentro de ella.
+Todas las bases viven en **una sola** instancia Postgres expuesta en `localhost:5438`; cada servicio usa su propia base dentro de ella.
 
 | Componente | Puerto local | Base de datos (en `localhost:5438`) |
 |---|---|---|
@@ -154,23 +130,25 @@ Todas las bases viven en **una sola** instancia Postgres expuesta en `localhost:
 | Academic | `5157` | `academic_db` |
 | Payments | `5235` | `payments_db` |
 | Attendance | `5188` | `attendance_db` |
-| Notifications | `5185` | — (stub) |
-| Analytics | `5247` | — (stub) |
+| Notifications | `5185` | `notifications_db` |
+| Analytics | `5247` | `analytics_db` |
 
 > En local **el Gateway escucha en `5287`** (no en 8080). El puerto 8080 solo se usa dentro de Docker.
 
-### Cómo funciona el ruteo (importante)
+### Cómo funciona el ruteo
 
 El Gateway carga un archivo de Ocelot distinto según dónde corre, detectado con la variable `DOTNET_RUNNING_IN_CONTAINER`:
 
-- **En Docker** (`DOTNET_RUNNING_IN_CONTAINER=true`) → `ocelot.json` → enruta a los hostnames de la red interna (`identity-service:8080`, …).
-- **En local** (variable ausente) → `ocelot.Local.json` → enruta a `localhost:<puerto launchSettings>`.
+- **En Docker** (`DOTNET_RUNNING_IN_CONTAINER=true`) → `ocelot.json` → hostnames de la red interna (`identity-service:8080`, …).
+- **En local** (variable ausente) → `ocelot.Local.json` → `localhost:<puerto launchSettings>`.
 
-La misma variable controla el binding del puerto: en Docker se fuerza `0.0.0.0:8080`; en local se respeta el puerto de `launchSettings`. Esto aplica a los 6 servicios **y** al Gateway.
+La misma variable controla el binding: en Docker se fuerza `0.0.0.0:8080`; en local se respeta el puerto de `launchSettings`. Aplica a los 6 servicios y al Gateway.
 
-### Migraciones EF
+### Migraciones EF y seed inicial
 
-Identity, Academic, Payments y Attendance aplican sus migraciones EF **automáticamente al arrancar** (`MigrateDatabase<TContext>()`), con reintentos mientras la DB termina de inicializar. No hay que correr `dotnet ef database update` a mano: basta con que la infraestructura Docker esté arriba antes de hacer `dotnet run`.
+Identity, Academic, Payments y Attendance aplican sus migraciones EF **automáticamente al arrancar** (`MigrateDatabase<TContext>()`), con reintentos mientras la DB inicializa. No se necesita `dotnet ef database update` manual.
+
+Identity además ejecuta `IdentityDbInitializer.Seed` justo después: si la tabla `users` está vacía, siembra los 4 usuarios predeterminados (ver [Paso 3](#paso-3--usuarios-de-arranque-sembrados-automáticamente)). Es idempotente.
 
 ### Verificar
 
@@ -179,6 +157,50 @@ Identity, Academic, Payments y Attendance aplican sus migraciones EF **automáti
 curl http://localhost:5245/health           # Identity
 # Salud a través del Gateway local
 curl http://localhost:5287/api/identity/health
+# Barrer todos los servicios
+for s in identity academic payments attendance notifications analytics; do
+  printf "%-14s → " "$s"
+  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5287/api/$s/health
+done
+```
+
+---
+
+## Modo B — Stack completo en Docker
+
+Todo el sistema corre en contenedores. Útil para validar el build de producción o para demostrar el sistema sin depender de terminales abiertas.
+
+### Levantar
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services up -d --build
+```
+
+- `-f docker-compose.local.yml` → quita el port mapping de RabbitMQ al host (los contenedores se hablan por la red interna `campusnet`, así que no lo necesitan).
+- `--profile services` → incluye Gateway + los 6 microservicios.
+- `--build` → reconstruye las imágenes; úsalo siempre tras cambios de código.
+
+Espera ~20-30 s. El Gateway espera a que todos los servicios levanten sus healthchecks.
+
+### Verificar
+
+```bash
+# Gateway en puerto 8080
+curl http://localhost:8080/health
+# → {"status":"ok","service":"gateway"}
+
+# Salud de todos los servicios a través del Gateway
+for s in identity academic payments attendance notifications analytics; do
+  printf "%-14s → " "$s"
+  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/$s/health
+done
+# → todos deben dar 200
+```
+
+Estado de contenedores:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml --profile services ps
 ```
 
 ---
@@ -223,6 +245,29 @@ kill <PID>
 ```
 
 Luego vuelve a `dotnet run` con el código actual.
+
+### `address already in use` en el puerto de un servicio (`dotnet run`)
+Cuando cierras la terminal sin hacer `Ctrl+C`, el proceso `dotnet` queda huérfano ocupando el puerto. Para diagnosticar y limpiar:
+
+```bash
+# Verificar qué proceso ocupa un puerto (ej. Identity en 5245)
+lsof -nP -iTCP:5245 -sTCP:LISTEN
+
+# Barrer todos los puertos de los servicios de una vez
+for port in 5287 5245 5157 5235 5188 5185 5247; do
+  pid=$(lsof -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | awk 'NR==2{print $2}')
+  [ -n "$pid" ] && echo "Puerto $port → PID $pid" && lsof -p $pid | grep -o '[A-Za-z]*.API\|CampusConnect.Gateway' | head -1
+done
+```
+
+**Señal de proceso huérfano**: PID muy inferior al de los servicios activos, y el nombre de proceso es genérico (`dotnet`) en lugar del binario nombrado (`Identity.API`, `Academic.API`, etc.).
+
+```bash
+# Matar solo los procesos huérfanos (ajustar PIDs según salida del comando anterior)
+kill <PID_HUERFANO>
+```
+
+> ⚠️ No mates procesos con nombre de binario propio (`Identity.API`, `CampusConnect.Gateway`) — esos son servicios correctamente levantados.
 
 ### Cambié código y no se refleja
 Las imágenes se cachean. Reconstruye con `--build` (o `up -d --build <servicio>` para uno solo).
