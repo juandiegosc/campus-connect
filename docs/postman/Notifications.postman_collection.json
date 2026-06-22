@@ -1,0 +1,225 @@
+{
+  "info": {
+    "name": "CampusConnect 360 · Notifications",
+    "_postman_id": "11111111-2222-4333-8444-aaaabbbbcccc",
+    "description": "Colección para probar el servicio Notifications a través del Gateway (http://localhost:5287).\n\nPatrones cubiertos:\n- Point-to-Point: POST /api/notifications/send (cola única notifications-send-notification).\n- Pub/Sub: matricular un estudiante (Academic) publica StudentEnrolled, que Notifications consume y convierte en notificación de bienvenida.\n\nLa petición 'Login' guarda el JWT en la variable de colección {{token}}; el resto la reutiliza.\n\nOrden sugerido: Login (Direccion) → Send (válido) → List → Login (Secretaria) → Academic Enroll → List → Send (canal inválido) → List.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5287", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "studentId", "value": "", "type": "string" },
+    { "key": "documentId", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (Direccion)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('token', json.accessToken);",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('rol Direccion', () => pm.expect(json.role).to.eql('Direccion'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"director1\",\n  \"password\": \"Admin1234!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "auth", "login"]
+            },
+            "description": "Autentica como director1 (rol Direccion) y guarda el accessToken en {{token}}. Requerido para POST /send."
+          }
+        },
+        {
+          "name": "Login (Secretaria)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('token', json.accessToken);",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('rol Secretaria', () => pm.expect(json.role).to.eql('Secretaria'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"secretaria1\",\n  \"password\": \"Admin1234!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "auth", "login"]
+            },
+            "description": "Autentica como secretaria1 (rol Secretaria). Necesario para matricular estudiantes (disparador Pub/Sub)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "health"]
+            },
+            "description": "Health check público del servicio Notifications."
+          }
+        },
+        {
+          "name": "List (recientes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?take=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications"],
+              "query": [{ "key": "take", "value": "100" }]
+            },
+            "description": "Lista las notificaciones recientes (más nueva primero). Requiere cualquier rol autenticado."
+          }
+        },
+        {
+          "name": "Send (válido · Point-to-Point)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"acudiente@campusconnect.edu\",\n  \"channel\": \"Email\",\n  \"subject\": \"Recordatorio\",\n  \"body\": \"Reunión de padres el viernes.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "send"]
+            },
+            "description": "Encola un SendNotificationCommand (Point-to-Point). Requiere rol Direccion. Devuelve 202; consulta el resultado con 'List'."
+          }
+        },
+        {
+          "name": "Send (canal inválido → Failed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "// Tras esto, la notificación queda como Failed y se publica NotificationFailed."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"x@y.com\",\n  \"channel\": \"Telegram\",\n  \"subject\": \"Canal invalido\",\n  \"body\": \"Debe registrarse como Failed.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "send"]
+            },
+            "description": "Canal inválido (Telegram): la notificación se registra como Failed y se publica NotificationFailed. Requiere rol Direccion."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Disparador Pub/Sub (Academic)",
+      "item": [
+        {
+          "name": "Enroll student",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Genera un documentId único para evitar conflictos.",
+                  "const doc = 'DOC' + Math.floor(100000 + Math.random() * 899999);",
+                  "pm.collectionVariables.set('documentId', doc);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('studentId', json.studentId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Juan Perez\",\n  \"documentId\": \"{{documentId}}\",\n  \"grade\": \"10A\",\n  \"schoolId\": \"SCH-001\",\n  \"guardianName\": \"Maria Perez\",\n  \"guardianEmail\": \"maria.perez@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/academic/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "academic", "students"]
+            },
+            "description": "Matricula un estudiante (requiere rol Secretaria → ejecuta antes 'Login (Secretaria)'). Publica StudentEnrolled, que Notifications consume y convierte en notificación de bienvenida (verlo en 'List')."
+          }
+        }
+      ]
+    }
+  ]
+}

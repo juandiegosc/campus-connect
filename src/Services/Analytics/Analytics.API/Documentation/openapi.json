@@ -2,41 +2,235 @@
   "openapi": "3.1.1",
   "info": {
     "title": "CampusConnect 360 — Analytics API",
-    "description": "Servicio de analítica (proyecciones de lectura). STUB: aún sin dominio implementado — expone solo health checks. Proyectará eventos del sistema (StudentEnrolled, PaymentConfirmed, AttendanceRecorded, etc.) a modelos de lectura en una fase futura.",
+    "description": "Servicio de analítica (read model CQRS). Consume eventos de negocio (StudentEnrolled, StudentStatusUpdated, PaymentConfirmed, AttendanceRecorded, IncidentReported, NotificationSent, NotificationFailed) y construye proyecciones para un tablero institucional con métricas agregadas. Autenticación JWT Bearer.",
     "contact": {
       "name": "CampusConnect 360 — Plataforma de gestión escolar"
     },
     "version": "v1"
   },
   "paths": {
-    "/health": {
+    "/api/analytics/dashboard": {
       "get": {
         "tags": [
-          "Analytics.API"
+          "Analytics"
+        ],
+        "summary": "Obtener el tablero analítico de la institución",
+        "description": "Devuelve métricas agregadas calculadas a partir de los eventos consumidos: total de estudiantes matriculados, pagos confirmados, pagos pendientes, asistencias registradas, incidentes reportados, notificaciones enviadas, eventos procesados, mensajes fallidos y estado general. Rol requerido: **Direccion**.",
+        "operationId": "GetDashboard",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/analytics/events": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "Listar los eventos procesados por el pipeline analítico",
+        "description": "Devuelve el registro de eventos de integración ingeridos (tipo, entidad, correlación, fechas), ordenados del más reciente al más antiguo. Parámetro opcional `take` (1-500, por defecto 100). Rol requerido: **Direccion**.",
+        "operationId": "GetAnalyticsEvents",
+        "parameters": [
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventLogDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DashboardDto": {
+        "required": [
+          "totalStudents",
+          "paymentsConfirmed",
+          "paymentsPending",
+          "attendanceRecorded",
+          "incidentsReported",
+          "notificationsSent",
+          "eventsProcessed",
+          "failedMessages",
+          "status",
+          "generatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "totalStudents": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "paymentsConfirmed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "paymentsPending": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "attendanceRecorded": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "incidentsReported": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "notificationsSent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "eventsProcessed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "failedMessages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EventLogDto": {
+        "required": [
+          "eventType",
+          "entityId",
+          "correlationId",
+          "occurredAt",
+          "receivedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "eventType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }
     },
-    "/api/analytics/health": {
-      "get": {
-        "tags": [
-          "Analytics.API"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "JWT obtenido en POST /api/identity/auth/login. Enviar en el header: Authorization: Bearer {token}.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   },
   "tags": [
     {
-      "name": "Analytics.API"
+      "name": "Analytics"
     }
   ]
 }

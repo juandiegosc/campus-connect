@@ -1,0 +1,209 @@
+{
+  "info": {
+    "name": "CampusConnect 360 · Analytics",
+    "_postman_id": "99999999-8888-4777-8666-ccccbbbbaaaa",
+    "description": "Colección para probar el servicio Analytics (read model CQRS) a través del Gateway (http://localhost:5287).\n\nAnalytics solo consume eventos y expone consultas de solo lectura (dashboard y eventos). Para ver datos primero hay que generar eventos: matricular un estudiante (Academic) y/o enviar una notificación (Notifications).\n\nLa petición 'Login' guarda el JWT en {{token}}. Dashboard y Events requieren rol Direccion.\n\nOrden sugerido: Login (Direccion) → Dashboard (estado inicial) → Login (Secretaria) → Academic Enroll → Login (Direccion) → Dashboard / Events.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5287", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "studentId", "value": "", "type": "string" },
+    { "key": "documentId", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (Direccion)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('token', json.accessToken);",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('rol Direccion', () => pm.expect(json.role).to.eql('Direccion'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"director1\",\n  \"password\": \"Admin1234!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "auth", "login"]
+            },
+            "description": "Autentica como director1 (rol Direccion) y guarda el accessToken en {{token}}. Requerido para Dashboard y Events."
+          }
+        },
+        {
+          "name": "Login (Secretaria)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('token', json.accessToken);",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('rol Secretaria', () => pm.expect(json.role).to.eql('Secretaria'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"secretaria1\",\n  \"password\": \"Admin1234!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "auth", "login"]
+            },
+            "description": "Autentica como secretaria1 (rol Secretaria). Necesario para matricular estudiantes y así generar eventos que Analytics consume."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/analytics/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "analytics", "health"]
+            },
+            "description": "Health check público del servicio Analytics."
+          }
+        },
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/analytics/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "analytics", "dashboard"]
+            },
+            "description": "Métricas agregadas del tablero de Dirección (totalStudents, pagos, asistencias, incidentes, notificaciones, eventos procesados, mensajes fallidos, estado). Requiere rol Direccion."
+          }
+        },
+        {
+          "name": "Events (procesados)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/analytics/events?take=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "analytics", "events"],
+              "query": [{ "key": "take", "value": "100" }]
+            },
+            "description": "Bitácora de eventos de integración ingeridos (tipo, entidad, correlación, fechas), del más reciente al más antiguo. Requiere rol Direccion."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generadores de eventos (opcional)",
+      "item": [
+        {
+          "name": "Academic · Enroll student (Secretaria)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Genera un documentId único para evitar conflictos.",
+                  "const doc = 'DOC' + Math.floor(100000 + Math.random() * 899999);",
+                  "pm.collectionVariables.set('documentId', doc);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('studentId', json.studentId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Juan Perez\",\n  \"documentId\": \"{{documentId}}\",\n  \"grade\": \"10A\",\n  \"schoolId\": \"SCH-001\",\n  \"guardianName\": \"Maria Perez\",\n  \"guardianEmail\": \"maria.perez@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/academic/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "academic", "students"]
+            },
+            "description": "Matricula un estudiante (rol Secretaria). Publica StudentEnrolled → Analytics incrementa totalStudents y paymentsPending. Ejecuta 'Login (Secretaria)' antes."
+          }
+        },
+        {
+          "name": "Notifications · Send (Direccion)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"acudiente@campusconnect.edu\",\n  \"channel\": \"Email\",\n  \"subject\": \"Recordatorio\",\n  \"body\": \"Mensaje para generar NotificationSent.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "send"]
+            },
+            "description": "Envía una notificación (rol Direccion) → publica NotificationSent → Analytics incrementa notificationsSent y eventsProcessed."
+          }
+        }
+      ]
+    }
+  ]
+}

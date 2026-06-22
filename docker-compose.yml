@@ -11,7 +11,6 @@ x-postgres-healthcheck: &pg-health
   retries: 5
 
 services:
-
   # ---------------------------------------------------------------------------
   # Mensajeria
   # ---------------------------------------------------------------------------
@@ -20,8 +19,8 @@ services:
     container_name: cc-rabbitmq
     hostname: rabbitmq
     ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # Panel de administracion
+      - "5672:5672" # AMQP
+      - "15672:15672" # Panel de administracion
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
@@ -159,9 +158,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=notifications_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_USER:-guest}
-      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
       Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
@@ -182,9 +181,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=analytics_db;Username=${DB_USER:-campus};Password=${DB_PASSWORD:-campus}"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_USER:-guest}
-      RabbitMq__Pass: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
       Jwt__Issuer: ${JWT_ISSUER:-campusconnect}
       Jwt__Audience: ${JWT_AUDIENCE:-campusconnect-clients}
       Jwt__SigningKey: ${JWT_SIGNING_KEY:-campus-connect-dev-placeholder-key-32b}
